@@ -4,7 +4,7 @@
  */
 const { log } = require('./logger');
 const { getConfig } = require('./config');
-const { forwardToolCall } = require('./client');
+const { forwardToolCall, startEnabledServers } = require('./client');
 const { 
   getCoreTools, 
   handleServersList, 
@@ -13,6 +13,9 @@ const {
   handleRefreshTools,
   fetchToolsFromEnabledServers
 } = require('./tools');
+
+// Start enabled servers on module load
+let serversStarted = false;
 
 /**
  * Process incoming JSON-RPC message
@@ -35,6 +38,49 @@ async function processMessage(message, sendResponse, sendNotification) {
   // Handle initialization
   if (message.method === 'initialize') {
     log('Handling initialize request');
+    
+    // Start enabled servers if not already started
+    if (!serversStarted) {
+      const config = getConfig();
+      log('Starting enabled servers automatically...');
+      
+      startEnabledServers(config.servers)
+        .then(results => {
+          serversStarted = true;
+          log('Server startup results:', results);
+          
+          // Send notification about started servers
+          sendNotification({
+            jsonrpc: '2.0',
+            method: 'update/tools',
+            params: {
+              message: `Started ${results.filter(r => r.success).length} enabled MCP servers`
+            }
+          });
+          
+          // Refresh tools after servers are started
+          fetchToolsFromEnabledServers()
+            .then(tools => {
+              log(`Fetched ${tools.length} tools from enabled servers after startup`);
+              
+              // Send update/tools notification
+              sendNotification({
+                jsonrpc: '2.0',
+                method: 'update/tools',
+                params: {
+                  message: `Updated tool list with ${tools.length} tools from enabled servers`
+                }
+              });
+            })
+            .catch(error => {
+              log('Error fetching tools after server startup:', error);
+            });
+        })
+        .catch(error => {
+          log('Error starting servers:', error);
+        });
+    }
+    
     return sendResponse({
       jsonrpc: '2.0',
       result: {

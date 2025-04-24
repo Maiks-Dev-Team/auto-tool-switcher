@@ -444,7 +444,78 @@ async function forwardToolCallViaChildProcess(server, toolName, toolParams, mess
   });
 }
 
+/**
+ * Start all enabled MCP servers
+ * @param {Array} servers - List of server configurations
+ * @returns {Promise<Array>} List of started servers
+ */
+async function startEnabledServers(servers) {
+  log('Starting all enabled MCP servers...');
+  
+  const enabledServers = servers.filter(server => server.enabled);
+  log(`Found ${enabledServers.length} enabled servers`);
+  
+  const startPromises = enabledServers.map(async server => {
+    try {
+      log(`Starting server: ${server.name}`);
+      
+      // Skip if the server is HTTP/HTTPS (assumed to be running externally)
+      if (server.url.startsWith('http://') || server.url.startsWith('https://')) {
+        log(`Server ${server.name} is HTTP/HTTPS, assuming it's already running`);
+        return { name: server.name, success: true, message: 'HTTP/HTTPS server, assumed running' };
+      }
+      
+      // Get the server configuration from mcp-config.json
+      const mcpConfig = getMcpConfig();
+      const serverConfig = mcpConfig.mcpServers[server.name];
+      
+      if (!serverConfig) {
+        log(`Server ${server.name} not found in MCP config`);
+        return { name: server.name, success: false, message: 'Not found in MCP config' };
+      }
+      
+      // Spawn the child process
+      const childProcess = spawn(
+        serverConfig.command,
+        serverConfig.args || [],
+        {
+          cwd: serverConfig.cwd || process.cwd(),
+          env: { ...process.env, ...(serverConfig.env || {}) },
+          stdio: ['pipe', 'pipe', 'pipe'],
+          detached: true  // Allow the process to run independently
+        }
+      );
+      
+      // Set up error handling
+      childProcess.on('error', (err) => {
+        log(`Error starting ${server.name}: ${err.message}`);
+      });
+      
+      // Log stdout and stderr
+      childProcess.stdout.on('data', (data) => {
+        log(`[${server.name}] stdout: ${data.toString().trim()}`);
+      });
+      
+      childProcess.stderr.on('data', (data) => {
+        log(`[${server.name}] stderr: ${data.toString().trim()}`);
+      });
+      
+      // Unref the child process to allow the parent to exit independently
+      childProcess.unref();
+      
+      log(`Server ${server.name} started successfully`);
+      return { name: server.name, success: true, message: 'Started successfully' };
+    } catch (error) {
+      log(`Error starting server ${server.name}: ${error.message}`);
+      return { name: server.name, success: false, message: error.message };
+    }
+  });
+  
+  return Promise.all(startPromises);
+}
+
 module.exports = {
   fetchToolsFromServer,
-  forwardToolCall
+  forwardToolCall,
+  startEnabledServers
 };
