@@ -277,17 +277,8 @@ if (isMcpClient) {
     rl.close();
   });
   
-  // Send initialization notification
-  console.log(JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'server/ready',
-    params: {
-      server: {
-        name: 'Auto Tool Switcher',
-        version: '1.0.0'
-      }
-    }
-  }));
+  // Do not send initialization notification - wait for client to initialize
+  log('[MCP] Waiting for client initialization request...');
 }
 
 // MCP message handler function
@@ -306,16 +297,21 @@ function handleMcpMessage(message, callback) {
   
   // Handle initialization request
   if (message.method === 'initialize') {
+    log('[MCP] Received initialization request');
+    log('[MCP] Client info:', message.params);
+    
     return callback({
       jsonrpc: '2.0',
       result: {
-        server: {
+        serverInfo: {
           name: 'Auto Tool Switcher',
-          version: '1.0.0'
+          version: '1.0.0',
+          protocolVersion: '2.0'
         },
         capabilities: {
           tools: {
-            supported: true
+            supported: true,
+            supportsCancel: true
           }
         }
       },
