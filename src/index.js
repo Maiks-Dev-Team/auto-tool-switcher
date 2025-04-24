@@ -227,80 +227,69 @@ function fetchToolsList(url) {
 // Import serverManager functions after defining fetchToolsList
 const { listServers, enableServer, disableServer } = require('./serverManager');
 
-// Implement MCP protocol with SSE transport
+// Implement MCP protocol with stdio transport
 
-// Store active SSE connections
-let activeConnections = [];
-
-// MCP SSE endpoint for client connection
-app.get('/sse', (req, res) => {
-  log('[MCP] SSE connection established');
-  log('[MCP] Client details:', {
-    ip: req.ip || req.connection.remoteAddress,
-    userAgent: req.headers['user-agent'],
-    time: new Date().toISOString()
+// Setup stdio communication if not running in Express mode
+if (process.env.MCP_STDIO === 'true') {
+  log('[MCP] Starting in stdio mode for MCP protocol');
+  
+  // Set up readline interface for reading from stdin
+  const readline = require('readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false
   });
   
-  // Set headers for SSE
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Handle incoming messages from stdin
+  rl.on('line', (line) => {
+    try {
+      const message = JSON.parse(line);
+      log('[MCP] Received message:', message);
+      
+      // Process the message based on MCP protocol
+      handleMcpMessage(message, (response) => {
+        // Send response back to stdout
+        console.log(JSON.stringify(response));
+      });
+    } catch (error) {
+      log('[MCP] Error processing message:', error);
+      // Send error response
+      console.log(JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32700,
+          message: 'Parse error'
+        },
+        id: null
+      }));
+    }
+  });
   
-  // Send initial connection message
-  const connectionId = Date.now().toString();
-  res.write(`data: ${JSON.stringify({
+  // Handle process exit
+  process.on('exit', () => {
+    log('[MCP] Process exiting, closing readline interface');
+    rl.close();
+  });
+  
+  // Send initialization notification
+  console.log(JSON.stringify({
     jsonrpc: '2.0',
-    method: 'connection/established',
+    method: 'server/ready',
     params: {
-      id: connectionId,
       server: {
         name: 'Auto Tool Switcher',
         version: '1.0.0'
       }
     }
-  })}\n\n`);
-  
-  // Store connection
-  activeConnections.push({
-    id: connectionId,
-    res,
-    createdAt: new Date()
-  });
-  
-  // Keep connection alive with heartbeat
-  const heartbeatInterval = setInterval(() => {
-    try {
-      res.write(`data: ${JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'connection/heartbeat',
-        params: {
-          timestamp: new Date().toISOString()
-        }
-      })}\n\n`);
-    } catch (e) {
-      log('[MCP] Error sending heartbeat:', e.message);
-      clearInterval(heartbeatInterval);
-    }
-  }, 30000);
-  
-  // Handle client disconnect
-  req.on('close', () => {
-    log('[MCP] SSE connection closed for', connectionId);
-    clearInterval(heartbeatInterval);
-    activeConnections = activeConnections.filter(conn => conn.id !== connectionId);
-  });
-});
+  }));
+}
 
-// MCP message endpoint for client-to-server communication
-app.post('/messages', express.json(), (req, res) => {
-  log('[MCP] Received message from client:', req.body);
-  
-  // Process the message based on MCP protocol
-  const message = req.body;
-  
+// MCP message handler function
+function handleMcpMessage(message, callback) {
+  // Validate JSON-RPC 2.0 message
   if (!message.jsonrpc || message.jsonrpc !== '2.0') {
-    return res.status(400).json({
+    return callback({
       jsonrpc: '2.0',
       error: {
         code: -32600,
@@ -312,7 +301,7 @@ app.post('/messages', express.json(), (req, res) => {
   
   // Handle initialization request
   if (message.method === 'initialize') {
-    return res.json({
+    return callback({
       jsonrpc: '2.0',
       result: {
         server: {
@@ -331,7 +320,7 @@ app.post('/messages', express.json(), (req, res) => {
   
   // Handle tools/list request
   if (message.method === 'tools/list') {
-    return res.json({
+    return callback({
       jsonrpc: '2.0',
       result: {
         tools: [
@@ -381,7 +370,7 @@ app.post('/messages', express.json(), (req, res) => {
     
     if (toolName === 'servers/list') {
       const config = getServersConfig();
-      return res.json({
+      return callback({
         jsonrpc: '2.0',
         result: {
           data: config
@@ -392,7 +381,7 @@ app.post('/messages', express.json(), (req, res) => {
     
     if (toolName === 'servers/enable' && toolParams.name) {
       // Logic to enable a server
-      return res.json({
+      return callback({
         jsonrpc: '2.0',
         result: {
           data: { success: true, message: `Server ${toolParams.name} enabled` }
@@ -403,7 +392,7 @@ app.post('/messages', express.json(), (req, res) => {
     
     if (toolName === 'servers/disable' && toolParams.name) {
       // Logic to disable a server
-      return res.json({
+      return callback({
         jsonrpc: '2.0',
         result: {
           data: { success: true, message: `Server ${toolParams.name} disabled` }
@@ -412,7 +401,7 @@ app.post('/messages', express.json(), (req, res) => {
       });
     }
     
-    return res.status(400).json({
+    return callback({
       jsonrpc: '2.0',
       error: {
         code: -32601,
@@ -423,13 +412,21 @@ app.post('/messages', express.json(), (req, res) => {
   }
   
   // Default response for unhandled methods
-  res.status(400).json({
+  callback({
     jsonrpc: '2.0',
     error: {
       code: -32601,
       message: 'Method not found'
     },
     id: message.id || null
+  });
+}
+
+// Also keep HTTP endpoints for testing
+app.post('/mcp', express.json(), (req, res) => {
+  log('[MCP] Received HTTP request:', req.body);
+  handleMcpMessage(req.body, (response) => {
+    res.json(response);
   });
 });
 
