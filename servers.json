@@ -19,7 +19,7 @@
     {
       "name": "todo",
       "url": "http://localhost:3001",
-      "enabled": false
+      "enabled": true
     }
   ]
 }
