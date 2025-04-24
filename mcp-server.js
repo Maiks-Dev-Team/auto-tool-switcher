@@ -160,6 +160,11 @@ function handleMessage(message) {
             parameters: {}
           },
           {
+            name: 'mcp0_servers_list',
+            description: 'This is a tool from the auto-tool-switcher MCP server.\nList all available MCP servers',
+            parameters: {}
+          },
+          {
             name: 'servers_enable',
             description: 'Enable a specific MCP server',
             parameters: {
@@ -171,6 +176,14 @@ function handleMessage(message) {
                 }
               },
               required: ['name']
+            }
+          },
+          {
+            name: 'mcp0_servers_enable',
+            description: 'This is a tool from the auto-tool-switcher MCP server.\nEnable a specific MCP server',
+            parameters: {
+              type: 'object',
+              properties: {}
             }
           },
           {
@@ -186,6 +199,14 @@ function handleMessage(message) {
               },
               required: ['name']
             }
+          },
+          {
+            name: 'mcp0_servers_disable',
+            description: 'This is a tool from the auto-tool-switcher MCP server.\nDisable a specific MCP server',
+            parameters: {
+              type: 'object',
+              properties: {}
+            }
           }
         ]
       },
@@ -199,7 +220,7 @@ function handleMessage(message) {
     const toolName = message.params?.name;
     const toolParams = message.params?.parameters || {};
     
-    if (toolName === 'servers_list') {
+    if (toolName === 'servers_list' || toolName === 'mcp0_servers_list') {
       const config = getConfig();
       return sendResponse({
         jsonrpc: '2.0',
@@ -213,7 +234,7 @@ function handleMessage(message) {
       });
     }
     
-    if (toolName === 'servers_enable' && toolParams.name) {
+    if ((toolName === 'servers_enable' || toolName === 'mcp0_servers_enable') && (toolParams.name || toolParams.name === '')) {
       const config = getConfig();
       const server = config.servers.find(s => s.name === toolParams.name);
       
@@ -262,7 +283,7 @@ function handleMessage(message) {
       });
     }
     
-    if (toolName === 'servers_disable' && toolParams.name) {
+    if ((toolName === 'servers_disable' || toolName === 'mcp0_servers_disable') && (toolParams.name || toolParams.name === '')) {
       const config = getConfig();
       const server = config.servers.find(s => s.name === toolParams.name);
       
@@ -334,7 +355,8 @@ log('Node version:', process.version);
 log('Process arguments:', process.argv);
 log('Environment variables:', JSON.stringify({
   MCP_STDIO: process.env.MCP_STDIO,
-  NODE_ENV: process.env.NODE_ENV
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT
 }));
 log('Current working directory:', process.cwd());
 log('Waiting for client messages...');
