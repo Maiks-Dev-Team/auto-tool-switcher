@@ -92,6 +92,27 @@ app.get('/mcp/test', (req, res) => {
   });
 });
 
+// Required MCP protocol endpoints
+app.get('/mcp/info', (req, res) => {
+  log('[MCP] MCP info request received');
+  res.json({
+    name: 'Auto Tool Switcher',
+    version: '1.0.0',
+    description: 'MCP Auto Tool Switcher server for enabling/disabling MCP servers with a configurable tool limit.',
+    capabilities: ['tools/list', 'servers/enable', 'servers/disable'],
+    protocol_version: '1.0'
+  });
+});
+
+app.get('/mcp/health', (req, res) => {
+  log('[MCP] MCP health check received');
+  res.json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Import getServersConfig from shared utils after setting up basic server
 const { getServersConfig } = require('./utils');
 
