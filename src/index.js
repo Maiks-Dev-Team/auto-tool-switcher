@@ -5,26 +5,44 @@ const fs = require('fs');
 const http = require('http');
 
 const LOG_PATH = path.resolve(__dirname, '../auto-tool-switcher.log');
+
+// Create or clear the log file at startup
+try {
+  fs.writeFileSync(LOG_PATH, '', { encoding: 'utf8' });
+  console.log(`Log file initialized at ${LOG_PATH}`);
+} catch (e) {
+  console.error(`Failed to initialize log file: ${e.message}`);
+}
+
+/**
+ * Log a message to both the console and log file
+ * @param {...any} args - Arguments to log
+ */
 function log(...args) {
-  const msg = `[${new Date().toISOString()}] ` + args.join(' ');
-  try {
-    // Clear log file if it's getting too large
-    try {
-      const stats = fs.statSync(LOG_PATH);
-      if (stats.size > 1024 * 1024) { // 1MB
-        fs.writeFileSync(LOG_PATH, '', 'utf8');
-        console.log('Log file cleared due to size');
+  // Format objects for better readability
+  const formattedArgs = args.map(arg => {
+    if (typeof arg === 'object' && arg !== null) {
+      try {
+        return JSON.stringify(arg, null, 2);
+      } catch (e) {
+        return '[Object]';
       }
-    } catch (e) {
-      // File doesn't exist, will be created
     }
-    
-    // Write with explicit utf8 encoding
-    fs.appendFileSync(LOG_PATH, msg + '\n', 'utf8');
-  } catch (e) {
-    console.error('[LOG ERROR]', e);
-  }
+    return arg;
+  });
+  
+  const timestamp = new Date().toISOString();
+  const msg = `[${timestamp}] ${formattedArgs.join(' ')}`;
+  
+  // Log to console
   console.log(msg);
+  
+  // Log to file with error handling
+  try {
+    fs.appendFileSync(LOG_PATH, msg + '\n', { encoding: 'utf8', flag: 'a' });
+  } catch (e) {
+    console.error(`Failed to write to log file: ${e.message}`);
+  }
 }
 
 const app = express();
