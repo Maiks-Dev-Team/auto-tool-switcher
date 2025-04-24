@@ -57,6 +57,22 @@ async function fetchToolsFromServer(server) {
   return new Promise((resolve, reject) => {
     log(`Fetching tools from server: ${server.name} at ${server.url}`);
     
+    // Check if we need to start a child process or use HTTP
+    if (server.url.startsWith('http://') || server.url.startsWith('https://')) {
+      // HTTP/HTTPS server - use REST API
+      fetchToolsViaHttp(server).then(resolve).catch(reject);
+    } else {
+      // Local server - use child process
+      fetchToolsViaChildProcess(server).then(resolve).catch(reject);
+    }
+  });
+}
+
+// Fetch tools from an HTTP/HTTPS server
+async function fetchToolsViaHttp(server) {
+  return new Promise((resolve, reject) => {
+    log(`Fetching tools via HTTP from: ${server.name} at ${server.url}`);
+    
     // Create a simple request to the server's tools/list endpoint
     const requestData = JSON.stringify({
       jsonrpc: '2.0',
@@ -70,7 +86,7 @@ async function fetchToolsFromServer(server) {
     const options = {
       hostname: serverUrl.hostname,
       port: serverUrl.port,
-      path: '/mcp',
+      path: '/mcp',  // Standard MCP endpoint
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -127,10 +143,152 @@ async function fetchToolsFromServer(server) {
   });
 }
 
+// Fetch tools using a child process
+async function fetchToolsViaChildProcess(server) {
+  return new Promise((resolve, reject) => {
+    log(`Fetching tools via child process from: ${server.name}`);
+    
+    try {
+      // Get the server configuration from mcp-config.json
+      const mcpConfigPath = path.resolve(__dirname, './mcp-config.json');
+      let mcpConfig;
+      
+      try {
+        const mcpConfigData = fs.readFileSync(mcpConfigPath, 'utf-8');
+        mcpConfig = JSON.parse(mcpConfigData);
+      } catch (e) {
+        log(`Error reading MCP config: ${e.message}`);
+        mcpConfig = { mcpServers: {} };
+      }
+      
+      const serverConfig = mcpConfig.mcpServers[server.name];
+      
+      if (!serverConfig) {
+        return reject(new Error(`Server ${server.name} not found in MCP config`));
+      }
+      
+      // Spawn the child process
+      const { spawn } = require('child_process');
+      const childProcess = spawn(
+        serverConfig.command,
+        serverConfig.args || [],
+        {
+          cwd: serverConfig.cwd || process.cwd(),
+          env: { ...process.env, ...(serverConfig.env || {}) },
+          stdio: ['pipe', 'pipe', 'pipe']
+        }
+      );
+      
+      // Set up readline to parse JSON-RPC messages
+      const readline = require('readline');
+      const rl = readline.createInterface({
+        input: childProcess.stdout,
+        terminal: false
+      });
+      
+      // Send initialize request
+      const initRequest = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {}
+      }) + '\n';
+      
+      childProcess.stdin.write(initRequest);
+      
+      // Send tools/list request after initialization
+      const toolsRequest = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/list',
+        params: {}
+      }) + '\n';
+      
+      let initialized = false;
+      let tools = [];
+      
+      // Process responses
+      rl.on('line', (line) => {
+        try {
+          const response = JSON.parse(line);
+          
+          // Handle initialization response
+          if (response.id === 1 && response.result) {
+            log(`Server ${server.name} initialized successfully`);
+            initialized = true;
+            childProcess.stdin.write(toolsRequest);
+          }
+          
+          // Handle tools/list response
+          if (response.id === 2 && response.result && response.result.tools) {
+            // Add server name prefix to each tool
+            tools = response.result.tools.map(tool => ({
+              ...tool,
+              name: `${server.name.toLowerCase().replace(/\s+/g, '_')}_${tool.name}`,
+              description: `[From ${server.name}] ${tool.description || ''}`
+            }));
+            
+            log(`Received ${tools.length} tools from ${server.name}`);
+            
+            // Clean up and resolve
+            childProcess.kill();
+            rl.close();
+            resolve(tools);
+          }
+        } catch (e) {
+          log(`Error parsing response from ${server.name}: ${e.message}`);
+          log(`Raw response: ${line}`);
+        }
+      });
+      
+      // Handle errors
+      childProcess.on('error', (err) => {
+        log(`Error with child process for ${server.name}: ${err.message}`);
+        reject(err);
+      });
+      
+      // Handle process exit
+      childProcess.on('exit', (code) => {
+        if (code !== 0 && tools.length === 0) {
+          reject(new Error(`Server ${server.name} exited with code ${code}`));
+        }
+      });
+      
+      // Set a timeout
+      setTimeout(() => {
+        if (tools.length === 0) {
+          childProcess.kill();
+          rl.close();
+          reject(new Error(`Timeout waiting for response from ${server.name}`));
+        }
+      }, 5000);
+    } catch (e) {
+      log(`Error fetching tools via child process: ${e.message}`);
+      reject(e);
+    }
+  });
+}
+
 // Forward a tool call to the appropriate server
 async function forwardToolCall(server, toolName, toolParams, messageId) {
   return new Promise((resolve, reject) => {
     log(`Forwarding tool call to ${server.name} at ${server.url}: ${toolName}`);
+    
+    // Check if we need to use HTTP or child process
+    if (server.url.startsWith('http://') || server.url.startsWith('https://')) {
+      // HTTP/HTTPS server
+      forwardToolCallViaHttp(server, toolName, toolParams, messageId).then(resolve).catch(reject);
+    } else {
+      // Local server - use child process
+      forwardToolCallViaChildProcess(server, toolName, toolParams, messageId).then(resolve).catch(reject);
+    }
+  });
+}
+
+// Forward a tool call via HTTP
+async function forwardToolCallViaHttp(server, toolName, toolParams, messageId) {
+  return new Promise((resolve, reject) => {
+    log(`Forwarding tool call via HTTP to ${server.name} at ${server.url}: ${toolName}`);
     
     // Create the request to forward to the server
     const requestData = JSON.stringify({
@@ -189,6 +347,130 @@ async function forwardToolCall(server, toolName, toolParams, messageId) {
     
     req.write(requestData);
     req.end();
+  });
+}
+
+// Forward a tool call via child process
+async function forwardToolCallViaChildProcess(server, toolName, toolParams, messageId) {
+  return new Promise((resolve, reject) => {
+    log(`Forwarding tool call via child process to ${server.name}: ${toolName}`);
+    
+    try {
+      // Get the server configuration from mcp-config.json
+      const mcpConfigPath = path.resolve(__dirname, './mcp-config.json');
+      let mcpConfig;
+      
+      try {
+        const mcpConfigData = fs.readFileSync(mcpConfigPath, 'utf-8');
+        mcpConfig = JSON.parse(mcpConfigData);
+      } catch (e) {
+        log(`Error reading MCP config: ${e.message}`);
+        mcpConfig = { mcpServers: {} };
+      }
+      
+      const serverConfig = mcpConfig.mcpServers[server.name];
+      
+      if (!serverConfig) {
+        return reject(new Error(`Server ${server.name} not found in MCP config`));
+      }
+      
+      // Spawn the child process
+      const { spawn } = require('child_process');
+      const childProcess = spawn(
+        serverConfig.command,
+        serverConfig.args || [],
+        {
+          cwd: serverConfig.cwd || process.cwd(),
+          env: { ...process.env, ...(serverConfig.env || {}) },
+          stdio: ['pipe', 'pipe', 'pipe']
+        }
+      );
+      
+      // Set up readline to parse JSON-RPC messages
+      const readline = require('readline');
+      const rl = readline.createInterface({
+        input: childProcess.stdout,
+        terminal: false
+      });
+      
+      // Send initialize request
+      const initRequest = JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {}
+      }) + '\n';
+      
+      childProcess.stdin.write(initRequest);
+      
+      let initialized = false;
+      let responseReceived = false;
+      
+      // Process responses
+      rl.on('line', (line) => {
+        try {
+          const response = JSON.parse(line);
+          
+          // Handle initialization response
+          if (response.id === 1 && response.result) {
+            log(`Server ${server.name} initialized successfully`);
+            initialized = true;
+            
+            // Send the actual tool call
+            const toolCallRequest = JSON.stringify({
+              jsonrpc: '2.0',
+              id: messageId,
+              method: 'tools/call',
+              params: {
+                name: toolName,
+                parameters: toolParams
+              }
+            }) + '\n';
+            
+            childProcess.stdin.write(toolCallRequest);
+          }
+          
+          // Handle tool call response
+          if (response.id === messageId) {
+            log(`Received response from ${server.name} for tool ${toolName}`);
+            responseReceived = true;
+            
+            // Clean up and resolve
+            childProcess.kill();
+            rl.close();
+            resolve(response);
+          }
+        } catch (e) {
+          log(`Error parsing response from ${server.name}: ${e.message}`);
+          log(`Raw response: ${line}`);
+        }
+      });
+      
+      // Handle errors
+      childProcess.on('error', (err) => {
+        log(`Error with child process for ${server.name}: ${err.message}`);
+        reject(err);
+      });
+      
+      // Handle process exit
+      childProcess.on('exit', (code) => {
+        if (code !== 0 && !responseReceived) {
+          reject(new Error(`Server ${server.name} exited with code ${code}`));
+        }
+      });
+      
+      // Set a timeout
+      setTimeout(() => {
+        if (!responseReceived) {
+          childProcess.kill();
+          rl.close();
+          reject(new Error(`Timeout waiting for response from ${server.name}`));
+        }
+      }, 5000);
+    } catch (e) {
+      log(`Error forwarding tool call via child process: ${e.message}`);
+      reject(e);
+    }
   });
 }
 
