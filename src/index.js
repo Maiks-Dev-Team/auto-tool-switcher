@@ -1,15 +1,41 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { listServers, enableServer, disableServer } = require('./serverManager');
+const http = require('http');
 
 const LOG_PATH = path.resolve(__dirname, '../auto-tool-switcher.log');
 function log(...args) {
   const msg = `[${new Date().toISOString()}] ` + args.join(' ');
-  fs.appendFileSync(LOG_PATH, msg + '\n');
+  try {
+    fs.appendFileSync(LOG_PATH, msg + '\n');
+  } catch (e) {
+    console.error('[LOG ERROR]', e);
+  }
   console.log(msg);
+}
+
+// Import getServersConfig from shared utils
+const { getServersConfig } = require('./utils');
+
+// Define fetchToolsList function
+function fetchToolsList(url) {
+  return new Promise((resolve) => {
+    const endpoint = url.replace(/\/$/, '') + '/tools/list';
+    http.get(endpoint, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          resolve(json.tools || []);
+        } catch {
+          resolve([]);
+        }
+      });
+    }).on('error', () => resolve([]));
+  });
 }
 
 const app = express();
@@ -47,46 +73,27 @@ requiredFiles.forEach(file => {
   }
 });
 
-// Export functions for potential future use
+app.use(bodyParser.json());
+
+// Log all incoming requests
+app.use((req, res, next) => {
+  log('[MCP] Incoming request:', req.method, req.url);
+  next();
+});
+
+// Minimal MCP endpoints for discovery
+app.get('/status', (req, res) => {
+  log('[MCP] Status request received');
+  res.json({ status: 'ok', type: 'auto-tool-switcher' });
+});
+
+// Define and export functions after they're used
 module.exports = {
   getServersConfig,
   fetchToolsList
 };
 
-app.use(bodyParser.json());
-
-// Log all incoming requests
-app.use((req, res, next) => {
-  log('Incoming request:', req.method, req.url);
-  next();
-});
-
-// Minimal MCP endpoints for discovery
-app.get('/status', (req, res) => res.json({ status: 'ok', type: 'auto-tool-switcher' }));
-
-const http = require('http');
-
-// Import getServersConfig from shared utils
-const { getServersConfig } = require('./utils');
-
-function fetchToolsList(url) {
-  return new Promise((resolve) => {
-    const endpoint = url.replace(/\/$/, '') + '/tools/list';
-    http.get(endpoint, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(json.tools || []);
-        } catch {
-          resolve([]);
-        }
-      });
-    }).on('error', () => resolve([]));
-  });
-}
-
+// Server endpoints
 app.get('/tools/list', async (req, res) => {
   try {
     const servers = getServersConfig().filter(s => s.enabled);
@@ -101,11 +108,11 @@ app.get('/tools/list', async (req, res) => {
         return [];
       }
     }));
-    const externalTools = toolsArrays.flat();
-    log('Returning', externalTools.length, 'tools');
-    res.json({ tools: externalTools });
+    const allTools = toolsArrays.flat();
+    log('Total tools aggregated:', allTools.length);
+    res.json({ tools: allTools });
   } catch (err) {
-    log('[ERROR] /tools/list failed:', err);
+    log('[ERROR] Failed to aggregate tools:', err);
     res.status(500).json({ error: 'Failed to aggregate tools' });
   }
 });
