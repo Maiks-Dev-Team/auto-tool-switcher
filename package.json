@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "server": "node src/index.js",
-    "mcp": "node mcp-server.js"
+    "mcp": "node mcp-server.js",
+    "cascade": "node cascade-integration.js"
   },
   "dependencies": {
     "body-parser": "^1.20.2",
