@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "auto-tool-switcher": {
+      "command": "node",
+      "args": ["mcp-server.js"],
+      "cwd": "b:/Projects/MCP/auto-tool-switcher",
+      "env": {
+        "MCP_STDIO": "true"
+      }
+    }
+  }
+}
