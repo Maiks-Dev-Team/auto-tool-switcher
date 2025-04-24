@@ -229,8 +229,13 @@ const { listServers, enableServer, disableServer } = require('./serverManager');
 
 // Implement MCP protocol with stdio transport
 
-// Setup stdio communication if not running in Express mode
-if (process.env.MCP_STDIO === 'true') {
+// Detect if we're being launched by an MCP client
+const isMcpClient = process.argv.includes('--mcp') || process.env.MCP_STDIO === 'true';
+
+// Setup stdio communication if running in MCP mode
+if (isMcpClient) {
+  // Set environment variable
+  process.env.MCP_STDIO = 'true';
   log('[MCP] Starting in stdio mode for MCP protocol');
   
   // Set up readline interface for reading from stdin
