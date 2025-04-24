@@ -227,6 +227,35 @@ function fetchToolsList(url) {
 // Import serverManager functions after defining fetchToolsList
 const { listServers, enableServer, disableServer } = require('./serverManager');
 
+// Add SSE endpoint for MCP client compatibility
+app.get('/sse', (req, res) => {
+  log('[MCP] SSE connection established');
+  log('[MCP] Client details:', {
+    ip: req.ip || req.connection.remoteAddress,
+    userAgent: req.headers['user-agent'],
+    time: new Date().toISOString()
+  });
+  
+  // Set headers for SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ type: 'connection_established', timestamp: new Date().toISOString() })}\n\n`);
+  
+  // Keep connection alive with heartbeat
+  const heartbeatInterval = setInterval(() => {
+    res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+  }, 30000);
+  
+  // Handle client disconnect
+  req.on('close', () => {
+    log('[MCP] SSE connection closed');
+    clearInterval(heartbeatInterval);
+  });
+});
+
 // Server endpoints
 app.get('/tools/list', async (req, res) => {
   try {
