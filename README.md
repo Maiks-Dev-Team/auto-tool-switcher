@@ -1,4 +1,4 @@
-# MCP Auto Tool Switcher (Tray Client)
+# MCP Auto Tool Switcher
 
 ![Status](https://img.shields.io/badge/status-early%20development-orange)
 
@@ -7,12 +7,17 @@
 ---
 
 ## ✨ Overview
-MCP Auto Tool Switcher is an Electron-based tray/menu bar application for managing [MCP](https://github.com/your-mcp-link) servers, tools, prompts, and resources directly from your system tray.
+MCP Auto Tool Switcher is a system for managing [MCP](https://github.com/your-mcp-link) servers, tools, prompts, and resources. It consists of two main components:
 
-- **Cross-platform:** Works on Windows, macOS, and Linux.
-- **Modern UI:** Accessible from your system tray for instant access.
-- **Server Management:** Add, remove, enable/disable, and configure MCP servers.
-- **Tool/Prompt/Resource Discovery:** List, invoke, and preview MCP tools, prompts, and resources.
+1. **Electron Tray Client**: A system tray application for managing MCP servers
+2. **Cascade MCP Server**: A modular MCP server that acts as a passthrough for tools from other MCP servers
+
+### Features
+- **Cross-platform:** Works on Windows, macOS, and Linux
+- **Modern UI:** Accessible from your system tray for instant access
+- **Server Management:** Add, remove, enable/disable, and configure MCP servers
+- **Tool/Prompt/Resource Discovery:** List, invoke, and preview MCP tools, prompts, and resources
+- **Server Tool Forwarding:** Act as a passthrough for tools from other MCP servers
 
 See [`PLAN.md`](./PLAN.md) for the current roadmap and feature set.
 
@@ -63,27 +68,56 @@ Add screenshots here when available.
 
 ---
 
-## 📝 Legacy: Node.js Server API (for reference)
-> These endpoints are from the earliest version of the project and may be removed in the future.
+## 📝 Cascade MCP Server
 
-**Features:**
-- List all connected MCP servers and their enabled/disabled status
-- Enable or disable servers (enforces a configurable tool limit)
-- Configuration stored in `servers.json`
+The Cascade MCP Server is a modular implementation of the MCP protocol that acts as a passthrough for tools from other MCP servers.
 
-**Usage:**
+### Architecture
+
+The server has been refactored into a modular structure with the following components:
+
+- **client.js**: Handles communication with other MCP servers
+- **tools.js**: Implements the core MCP tools
+- **server.js**: Implements the MCP server protocol
+- **config.js**: Manages configuration
+- **logger.js**: Handles logging
+- **index.js**: Main entry point
+
+### Features
+
+- **Server Tool Forwarding**: Act as a passthrough for tools from other MCP servers
+- **Server Management**: Enable/disable MCP servers
+- **Tool Discovery**: Fetch and combine tools from all enabled servers
+- **Tool Invocation**: Forward tool calls to the appropriate server
+
+### Usage
+
 1. Install dependencies:
    ```sh
-   npm install express body-parser
+   npm install
    ```
-2. Start the server:
+
+2. Start the Cascade MCP Server:
    ```sh
-   node src/index.js
+   node cascade-mcp-server.js
    ```
-3. API Endpoints:
-   - `GET /servers` — List all servers and their status
-   - `POST /servers/enable` — Enable a server (JSON body: `{ "name": "MCP Alpha" }`)
-   - `POST /servers/disable` — Disable a server (JSON body: `{ "name": "MCP Alpha" }`)
+
+3. Available Tools:
+   - `mcp0_servers_list` — List all servers and their status
+   - `mcp0_servers_enable` — Enable a server
+   - `mcp0_servers_disable` — Disable a server
+   - `mcp0_refresh_tools` — Refresh the list of tools from all enabled servers
+
+### Testing
+
+A comprehensive test suite is available in the `test` directory. To run the tests:
+
+```sh
+cd test
+node test-server-improved.js
+```
+
+See the [test README](./test/README.md) for more information.
 
 **Configuration:**
 Edit `servers.json` to change the tool limit or add/remove MCP servers.
