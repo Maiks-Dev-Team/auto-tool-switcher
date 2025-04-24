@@ -18,6 +18,35 @@ const PORT = 12345;
 // Disable Electron launching for now to focus on MCP server functionality
 log('[MCP] Running in server-only mode (Electron disabled)');
 
+// Log startup information
+log('[MCP] Starting server...');
+log('[MCP] Node version:', process.version);
+log('[MCP] Current working directory:', process.cwd());
+log('[MCP] Process arguments:', process.argv);
+log('[MCP] Environment:', process.env.NODE_ENV || 'development');
+
+// Log file system access
+try {
+  const stat = fs.statSync(LOG_PATH);
+  log('[MCP] Log file exists:', LOG_PATH);
+  log('[MCP] Log file size:', stat.size, 'bytes');
+} catch (e) {
+  log('[MCP] Creating new log file:', LOG_PATH);
+  fs.writeFileSync(LOG_PATH, '');
+}
+
+// Log required files
+const requiredFiles = ['package.json', 'servers.json'];
+requiredFiles.forEach(file => {
+  try {
+    const filePath = path.resolve(__dirname, '../', file);
+    fs.accessSync(filePath);
+    log('[MCP] Found required file:', filePath);
+  } catch (e) {
+    log('[ERROR] Missing required file:', file);
+  }
+});
+
 // Export functions for potential future use
 module.exports = {
   getServersConfig,
@@ -85,14 +114,41 @@ app.get('/servers', listServers);
 app.post('/servers/enable', enableServer);
 app.post('/servers/disable', disableServer);
 
+// Log server startup
 app.listen(PORT, () => {
-  log(`[MCP] Auto Tool Switcher server running on port ${PORT}`);
+  log('[MCP] Server listening on port', PORT);
+  log('[MCP] Server URL:', `http://localhost:${PORT}`);
 });
 
 // Log all uncaught errors and promise rejections
 process.on('uncaughtException', err => {
-  log('[UNCAUGHT]', err.stack || err);
+  log('[ERROR] Uncaught exception:', err.stack || err);
 });
 process.on('unhandledRejection', err => {
-  log('[UNHANDLED REJECTION]', err && err.stack || err);
+  log('[ERROR] Unhandled rejection:', err && err.stack || err);
 });
+
+// Log process exit
+process.on('exit', code => {
+  log('[MCP] Process exiting with code:', code);
+});
+
+// Log process signals
+process.on('SIGINT', () => {
+  log('[MCP] Received SIGINT signal');
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  log('[MCP] Received SIGTERM signal');
+  process.exit(0);
+});
+
+// Log memory usage periodically
+setInterval(() => {
+  const mem = process.memoryUsage();
+  log('[MCP] Memory usage:', {
+    rss: (mem.rss / 1024 / 1024).toFixed(2) + ' MB',
+    heapTotal: (mem.heapTotal / 1024 / 1024).toFixed(2) + ' MB',
+    heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2) + ' MB'
+  });
+}, 30000); // Log every 30 seconds
