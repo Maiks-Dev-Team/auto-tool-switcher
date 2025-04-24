@@ -16,33 +16,18 @@ Welcome to the Auto Tool Switcher documentation. This documentation provides com
 
 ## Overview
 
-The Auto Tool Switcher is a system for managing [MCP](https://github.com/your-mcp-link) servers, tools, prompts, and resources. It consists of two main components:
-
-1. **Electron Tray Client**: A system tray application for managing MCP servers
-2. **Cascade MCP Server**: A modular MCP server that acts as a passthrough for tools from other MCP servers
+The Auto Tool Switcher is a system for managing [MCP](https://github.com/your-mcp-link) servers, tools, prompts, and resources. It is a modular MCP server that acts as a passthrough for tools from other MCP servers.
 
 ### Features
 
 - **Cross-platform:** Works on Windows, macOS, and Linux
-- **Modern UI:** Accessible from your system tray for instant access
-- **Server Management:** Add, remove, enable/disable, and configure MCP servers
+- **Server Management:** Add, remove, enable/disable, and configure MCP servers via MCP tools
 - **Tool/Prompt/Resource Discovery:** List, invoke, and preview MCP tools, prompts, and resources
 - **Server Tool Forwarding:** Act as a passthrough for tools from other MCP servers
 - **Automatic Server Startup:** Automatically starts all enabled MCP servers on initialization
 - **Intelligent Tool Caching:** Implements efficient caching for improved performance
 
 ## Components
-
-### Electron Tray Client
-
-The Electron Tray Client provides a user-friendly interface for managing MCP servers from your system tray.
-
-Features:
-- System Tray/Menu Bar Icon (Windows: Taskbar tray icon, Mac: Menu bar icon)
-- Context Menu (Add/Remove/List/Edit servers, Open Configuration File, Quit)
-- Dialogs/Forms for adding, editing, and removing servers
-- Persistent Storage (Updates a JSON config file)
-- Cross-Platform Support (Works on both Windows and Mac)
 
 ### Cascade MCP Server
 
@@ -77,13 +62,7 @@ npm install
 
 ## Usage
 
-### Starting the Electron Tray Client
-
-```sh
-npm start
-```
-
-### Starting the Cascade MCP Server
+### Starting the Auto Tool Switcher
 
 ```sh
 node cascade-mcp-server.js
@@ -279,22 +258,20 @@ Here's an example of a complete `mcp_config.json` file with the Auto Tool Switch
 ## Development Plan
 
 ### Goal
-Create a cross-platform tray/menu bar application that allows users to intuitively add, remove, and manage MCP servers from their desktop environment.
+Improve the Auto Tool Switcher to provide a robust and efficient way to manage MCP servers and their tools.
 
 ### Implementation Steps
-1. **Project Setup**
-   - Initialize Electron project
-   - Add basic tray/menu bar functionality
-2. **Tray/Menu Bar Icon & Context Menu**
-   - Implement tray icon and context menu with all planned actions
-3. **Config Management**
-   - Read/write MCP server configurations to a JSON file
-   - Add logic for adding, removing, editing servers
-4. **Dialogs/UI**
-   - Implement dialogs for user input (add/edit servers)
-5. **Cross-Platform Testing**
-   - Test on both Windows and Mac for consistent UX
-6. **Documentation**
+1. **Core Functionality**
+   - Implement server management tools
+   - Add tool discovery and forwarding
+   - Implement automatic server startup
+2. **Configuration Management**
+   - Read/write server configurations to JSON files
+   - Add logic for adding, removing, enabling/disabling servers
+3. **Testing**
+   - Create comprehensive test suite
+   - Ensure cross-platform compatibility
+4. **Documentation**
    - Provide usage instructions for end users
 
 ### MCP Concepts Integration
@@ -313,6 +290,12 @@ Create a cross-platform tray/menu bar application that allows users to intuitive
 - Future UI: Show available tools, descriptions, and allow direct execution from the tray menu.
 
 ### Future Enhancements
+- **Electron Tray Client**: A system tray application for managing MCP servers with the following features:
+  - System Tray/Menu Bar Icon (Windows: Taskbar tray icon, Mac: Menu bar icon)
+  - Context Menu (Add/Remove/List/Edit servers, Open Configuration File, Quit)
+  - Dialogs/Forms for adding, editing, and removing servers
+  - Persistent Storage (Updates a JSON config file)
+  - Cross-Platform Support (Works on both Windows and Mac)
 - Import/export server configs
 - Integration with MCP client for live status
 - Notifications for server events/errors
