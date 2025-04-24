@@ -4,53 +4,18 @@
  */
 const { log } = require('./logger');
 const { getConfig, saveConfig, getEnabledCount } = require('./config');
-const { fetchToolsFromServer } = require('./client');
+const { 
+  getCoreTools: getToolsList, 
+  fetchToolsFromEnabledServers: fetchTools,
+  invalidateCache
+} = require('./tools-manager');
 
 /**
  * Get the list of core tools
  * @returns {Array} List of core tools
  */
 function getCoreTools() {
-  return [
-    {
-      name: 'mcp0_servers_list',
-      description: 'List all available MCP servers',
-      parameters: {}
-    },
-    {
-      name: 'mcp0_servers_enable',
-      description: 'Enable a specific MCP server',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Name of the server to enable'
-          }
-        },
-        required: ['name']
-      }
-    },
-    {
-      name: 'mcp0_servers_disable',
-      description: 'Disable a specific MCP server',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Name of the server to disable'
-          }
-        },
-        required: ['name']
-      }
-    },
-    {
-      name: 'mcp0_refresh_tools',
-      description: 'Refresh the list of tools from all enabled servers',
-      parameters: {}
-    }
-  ];
+  return getToolsList();
 }
 
 /**
@@ -161,12 +126,15 @@ async function handleServersEnable(message, toolParams, sendResponse, sendNotifi
   server.enabled = true;
   saveConfig(config);
   
+  // Invalidate the tools cache since server status has changed
+  invalidateCache();
+  
   // Send update/tools notification to inform clients about the change
   sendNotification({
     jsonrpc: '2.0',
     method: 'update/tools',
     params: {
-      message: `Server '${serverName}' enabled`
+      message: `Server '${serverName}' enabled. Refreshing tools...`
     }
   });
   log('Sent update/tools notification after enabling server');
@@ -279,6 +247,9 @@ async function handleServersDisable(message, toolParams, sendResponse, sendNotif
 async function handleRefreshTools(message, sendResponse, sendNotification) {
   log('Handling refresh_tools request');
   
+  // Invalidate the tools cache
+  invalidateCache();
+  
   // Send update/tools notification to inform clients about refreshed tools
   sendNotification({
     jsonrpc: '2.0',
@@ -288,6 +259,24 @@ async function handleRefreshTools(message, sendResponse, sendNotification) {
     }
   });
   log('Sent update/tools notification for refresh_tools');
+  
+  // Fetch tools from all enabled servers with force refresh
+  fetchToolsFromEnabledServers(true)
+    .then(tools => {
+      log(`Refreshed ${tools.length} tools from enabled servers`);
+      
+      // Send another notification with the result
+      sendNotification({
+        jsonrpc: '2.0',
+        method: 'update/tools',
+        params: {
+          message: `Found ${tools.length} tools from enabled servers.`
+        }
+      });
+    })
+    .catch(error => {
+      log('Error refreshing tools:', error);
+    });
   
   return sendResponse({
     jsonrpc: '2.0',
@@ -304,32 +293,11 @@ async function handleRefreshTools(message, sendResponse, sendNotification) {
 
 /**
  * Fetch tools from all enabled servers
+ * @param {boolean} forceRefresh - Force refresh the cache
  * @returns {Promise<Array>} List of tools from all enabled servers
  */
-async function fetchToolsFromEnabledServers() {
-  const config = getConfig();
-  const enabledServers = config.servers.filter(s => s.enabled);
-  let serverTools = [];
-  
-  // For each enabled server, try to fetch its tools
-  const fetchPromises = enabledServers.map(async server => {
-    try {
-      const tools = await fetchToolsFromServer(server);
-      return tools;
-    } catch (error) {
-      log(`Error fetching tools from ${server.name}:`, error);
-      return [];
-    }
-  });
-  
-  // Wait for all fetches to complete
-  const results = await Promise.all(fetchPromises);
-  
-  // Flatten the array of arrays
-  serverTools = results.flat();
-  log(`Fetched ${serverTools.length} tools from ${enabledServers.length} enabled servers`);
-  
-  return serverTools;
+async function fetchToolsFromEnabledServers(forceRefresh = false) {
+  return fetchTools(forceRefresh);
 }
 
 module.exports = {

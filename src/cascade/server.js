@@ -6,13 +6,16 @@ const { log } = require('./logger');
 const { getConfig } = require('./config');
 const { forwardToolCall, startEnabledServers } = require('./client');
 const { 
-  getCoreTools, 
   handleServersList, 
   handleServersEnable, 
   handleServersDisable, 
   handleRefreshTools,
   fetchToolsFromEnabledServers
 } = require('./tools');
+const {
+  getCoreTools,
+  getAllTools
+} = require('./tools-manager');
 
 // Start enabled servers on module load
 let serversStarted = false;
@@ -102,29 +105,32 @@ async function processMessage(message, sendResponse, sendNotification) {
   if (message.method === 'tools/list') {
     log('Handling tools/list request');
     
-    // Get core tools
-    const coreTools = getCoreTools();
-    
-    // Get tools from enabled servers
-    let serverTools = [];
-    
-    // Fetch tools from enabled servers asynchronously
-    fetchToolsFromEnabledServers()
-      .then(tools => {
-        serverTools = tools;
-        
+    // Get all tools (core + server) using the tools manager
+    getAllTools()
+      .then(allTools => {
         // Send update/tools notification
         sendNotification({
           jsonrpc: '2.0',
           method: 'update/tools',
           params: {
-            message: `Updated tool list with ${serverTools.length} tools from enabled servers`
+            message: `Updated tool list with ${allTools.length - getCoreTools().length} tools from enabled servers`
           }
         });
       })
       .catch(error => {
         log('Error fetching tools from servers:', error);
       });
+    
+    // Get the current tools (may be from cache)
+    const coreTools = getCoreTools();
+    let serverTools = [];
+    
+    // Try to get server tools immediately (may be cached)
+    fetchToolsFromEnabledServers()
+      .then(tools => {
+        serverTools = tools;
+      })
+      .catch(() => {});
     
     // Combine core tools with any server tools we might already have
     const allTools = [...coreTools, ...serverTools];
