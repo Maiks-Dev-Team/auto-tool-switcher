@@ -32,6 +32,9 @@ coverage/
 .idea/
 *.iml
 
+# MCP Configuration
+mcp-config-examples.json
+
 # Git
 .git/
 .windsurfrules
