@@ -141,12 +141,30 @@ function processMessage(message) {
       {
         name: 'mcp0_servers_enable',
         description: 'Enable a specific MCP server',
-        parameters: {}
+        parameters: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Name of the server to enable'
+            }
+          },
+          required: ['name']
+        }
       },
       {
         name: 'mcp0_servers_disable',
         description: 'Disable a specific MCP server',
-        parameters: {}
+        parameters: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Name of the server to disable'
+            }
+          },
+          required: ['name']
+        }
       }
     ];
     
@@ -181,6 +199,16 @@ function processMessage(message) {
       
       log('Formatted servers:', formattedServers);
       
+      // Send update/tools notification to inform clients about available tools
+      process.stdout.write(JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'update/tools',
+        params: {
+          message: `Refreshed server list. Found ${formattedServers.length} servers.`
+        }
+      }) + '\n');
+      log('Sent update/tools notification after listing servers');
+      
       // Return a more detailed and formatted response
       const response = {
         jsonrpc: '2.0',
@@ -201,7 +229,7 @@ function processMessage(message) {
     
     if (toolName === 'mcp0_servers_enable') {
       const config = getConfig();
-      const serverName = toolParams.name || 'MCP Beta';
+      const serverName = toolParams.name || 'MCP Alpha';
       
       log(`Enabling server: ${serverName}`);
       
@@ -288,7 +316,7 @@ function processMessage(message) {
     
     if (toolName === 'mcp0_servers_disable') {
       const config = getConfig();
-      const serverName = toolParams.name || 'MCP Alpha';
+      const serverName = toolParams.name || 'MCP Beta';
       
       log(`Disabling server: ${serverName}`);
       
