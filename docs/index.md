@@ -28,6 +28,8 @@ The Auto Tool Switcher is a system for managing [MCP](https://github.com/your-mc
 - **Server Management:** Add, remove, enable/disable, and configure MCP servers
 - **Tool/Prompt/Resource Discovery:** List, invoke, and preview MCP tools, prompts, and resources
 - **Server Tool Forwarding:** Act as a passthrough for tools from other MCP servers
+- **Automatic Server Startup:** Automatically starts all enabled MCP servers on initialization
+- **Intelligent Tool Caching:** Implements efficient caching for improved performance
 
 ## Components
 
@@ -51,6 +53,9 @@ Features:
 - **Server Management**: Enable/disable MCP servers
 - **Tool Discovery**: Fetch and combine tools from all enabled servers
 - **Tool Invocation**: Forward tool calls to the appropriate server
+- **Automatic Server Startup**: Automatically starts all enabled MCP servers when initializing
+- **Intelligent Tool Caching**: Implements caching with configurable refresh intervals for better performance
+- **Robust Error Handling**: Provides detailed error messages and fallbacks for improved reliability
 
 ## Installation
 
@@ -107,10 +112,14 @@ auto-tool-switcher/
 │   │   ├── index.js           # Main entry point for Cascade modules
 │   │   ├── logger.js          # Logging functionality
 │   │   ├── server.js          # MCP server protocol implementation
-│   │   └── tools.js           # Core MCP tools implementation
+│   │   ├── tools.js           # Core MCP tools implementation
+│   │   └── tools-manager.js   # Tool discovery and caching system
 │   ├── index.js               # Main entry point for the Express server
 │   └── ...                    # Other source files
 ├── test/                      # Test files
+│   ├── auto-start-servers.test.js # Test for automatic server startup
+│   └── ...                    # Other test files
+├── reference/                 # Reference files and unused code
 ├── cascade-mcp-server.js      # Main entry point for Cascade MCP Server
 ├── mcp-config.json            # Configuration for MCP servers
 ├── servers.json               # Server list and configuration
@@ -128,13 +137,17 @@ cascade-mcp-server.js
     │       │       │
     │       │       ├── src/cascade/tools.js
     │       │       │       │
-    │       │       │       └── src/cascade/client.js
+    │       │       │       ├── src/cascade/config.js
+    │       │       │       │
+    │       │       │       └── src/cascade/tools-manager.js
     │       │       │
-    │       │       └── src/cascade/client.js
+    │       │       ├── src/cascade/client.js
+    │       │       │       │
+    │       │       │       └── src/cascade/config.js
+    │       │       │
+    │       │       └── src/cascade/tools-manager.js
     │       │
-    │       ├── src/cascade/logger.js
-    │       │
-    │       └── src/cascade/config.js
+    │       └── src/cascade/logger.js
     │
     └── servers.json
 ```
@@ -177,6 +190,14 @@ Handles logging:
 Main entry point for Cascade modules:
 - Sets up stdin/stdout communication
 - Provides core functions
+
+#### src/cascade/tools-manager.js
+
+Centralized tool management system:
+- Handles tool discovery and caching
+- Provides APIs for getting core tools, server tools, and all tools
+- Implements intelligent caching with configurable refresh intervals
+- Handles cache invalidation when server status changes
 
 ## Cascade Integration
 
@@ -310,6 +331,7 @@ A comprehensive test suite is available in the `test` directory:
 
 - **test-server.js**: Basic test script that sends initialize, tools/list, and servers_list requests to the server
 - **test-server-improved.js**: Enhanced test script with better output formatting and logging to test-results.log
+- **auto-start-servers.test.js**: Test for the automatic server startup functionality
 
 To run the tests:
 
