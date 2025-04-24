@@ -1,11 +1,10 @@
 /**
  * Auto Tool Switcher MCP Server
- * Based on the Model Context Protocol
+ * Simple implementation of the Model Context Protocol
  */
-const { createMcpServer, StdioTransport } = require('@modelcontextprotocol/sdk');
-const { z } = require('zod');
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 
 // Setup logging
 const LOG_PATH = path.resolve(__dirname, './auto-tool-switcher.log');
@@ -82,91 +81,252 @@ function getEnabledCount(config) {
   return config.servers.filter(s => s.enabled).length;
 }
 
-// Initialize MCP Server
-const server = createMcpServer({
-  serverInfo: {
-    name: 'Auto Tool Switcher',
-    version: '1.0.0'
+// Initialize readline interface
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  terminal: false
+});
+
+// Handle incoming messages
+rl.on('line', (line) => {
+  try {
+    const message = JSON.parse(line);
+    log('Received message:', message);
+    
+    handleMessage(message);
+  } catch (error) {
+    log('Error processing message:', error);
+    sendResponse({
+      jsonrpc: '2.0',
+      error: {
+        code: -32700,
+        message: 'Parse error'
+      },
+      id: null
+    });
   }
 });
 
-// Define the servers/list tool
-server.tools.define({
-  name: 'servers/list',
-  description: 'List all available MCP servers',
-  parameters: z.object({}),
-  handler: async () => {
-    log('Handling servers/list request');
-    const config = getConfig();
-    return {
-      tool_limit: config.tool_limit,
-      servers: config.servers
-    };
-  }
+// Handle process exit
+process.on('exit', () => {
+  log('Process exiting, closing readline interface');
+  rl.close();
 });
 
-// Define the servers/enable tool
-server.tools.define({
-  name: 'servers/enable',
-  description: 'Enable a specific MCP server',
-  parameters: z.object({
-    name: z.string().describe('Name of the server to enable')
-  }),
-  handler: async ({ name }) => {
-    log('Handling servers/enable request for:', name);
-    const config = getConfig();
-    const server = config.servers.find(s => s.name === name);
-    
-    if (!server) {
-      throw new Error(`Server '${name}' not found`);
-    }
-    
-    if (server.enabled) {
-      return { success: true, message: `Server '${name}' is already enabled` };
-    }
-    
-    const enabledCount = getEnabledCount(config);
-    if (enabledCount >= config.tool_limit) {
-      throw new Error(`Tool limit (${config.tool_limit}) reached. Disable another server first.`);
-    }
-    
-    server.enabled = true;
-    saveConfig(config);
-    
-    return { success: true, message: `Server '${name}' enabled` };
+// Handle message based on method
+function handleMessage(message) {
+  if (!message.jsonrpc || message.jsonrpc !== '2.0') {
+    return sendResponse({
+      jsonrpc: '2.0',
+      error: {
+        code: -32600,
+        message: 'Invalid Request'
+      },
+      id: message.id || null
+    });
   }
-});
-
-// Define the servers/disable tool
-server.tools.define({
-  name: 'servers/disable',
-  description: 'Disable a specific MCP server',
-  parameters: z.object({
-    name: z.string().describe('Name of the server to disable')
-  }),
-  handler: async ({ name }) => {
-    log('Handling servers/disable request for:', name);
-    const config = getConfig();
-    const server = config.servers.find(s => s.name === name);
-    
-    if (!server) {
-      throw new Error(`Server '${name}' not found`);
-    }
-    
-    if (!server.enabled) {
-      return { success: true, message: `Server '${name}' is already disabled` };
-    }
-    
-    server.enabled = false;
-    saveConfig(config);
-    
-    return { success: true, message: `Server '${name}' disabled` };
+  
+  // Handle initialization
+  if (message.method === 'initialize') {
+    log('Handling initialize request');
+    return sendResponse({
+      jsonrpc: '2.0',
+      result: {
+        serverInfo: {
+          name: 'Auto Tool Switcher',
+          version: '1.0.0'
+        },
+        capabilities: {
+          tools: {
+            supported: true
+          }
+        }
+      },
+      id: message.id
+    });
   }
-});
+  
+  // Handle tools/list
+  if (message.method === 'tools/list') {
+    log('Handling tools/list request');
+    return sendResponse({
+      jsonrpc: '2.0',
+      result: {
+        tools: [
+          {
+            name: 'servers/list',
+            description: 'List all available MCP servers',
+            parameters: {}
+          },
+          {
+            name: 'servers/enable',
+            description: 'Enable a specific MCP server',
+            parameters: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                  description: 'Name of the server to enable'
+                }
+              },
+              required: ['name']
+            }
+          },
+          {
+            name: 'servers/disable',
+            description: 'Disable a specific MCP server',
+            parameters: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                  description: 'Name of the server to disable'
+                }
+              },
+              required: ['name']
+            }
+          }
+        ]
+      },
+      id: message.id
+    });
+  }
+  
+  // Handle tools/call
+  if (message.method === 'tools/call') {
+    log('Handling tools/call request');
+    const toolName = message.params?.name;
+    const toolParams = message.params?.parameters || {};
+    
+    if (toolName === 'servers/list') {
+      const config = getConfig();
+      return sendResponse({
+        jsonrpc: '2.0',
+        result: {
+          data: {
+            tool_limit: config.tool_limit,
+            servers: config.servers
+          }
+        },
+        id: message.id
+      });
+    }
+    
+    if (toolName === 'servers/enable' && toolParams.name) {
+      const config = getConfig();
+      const server = config.servers.find(s => s.name === toolParams.name);
+      
+      if (!server) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          error: {
+            code: -32602,
+            message: `Server '${toolParams.name}' not found`
+          },
+          id: message.id
+        });
+      }
+      
+      if (server.enabled) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          result: {
+            data: { success: true, message: `Server '${toolParams.name}' is already enabled` }
+          },
+          id: message.id
+        });
+      }
+      
+      const enabledCount = getEnabledCount(config);
+      if (enabledCount >= config.tool_limit) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          error: {
+            code: -32602,
+            message: `Tool limit (${config.tool_limit}) reached. Disable another server first.`
+          },
+          id: message.id
+        });
+      }
+      
+      server.enabled = true;
+      saveConfig(config);
+      
+      return sendResponse({
+        jsonrpc: '2.0',
+        result: {
+          data: { success: true, message: `Server '${toolParams.name}' enabled` }
+        },
+        id: message.id
+      });
+    }
+    
+    if (toolName === 'servers/disable' && toolParams.name) {
+      const config = getConfig();
+      const server = config.servers.find(s => s.name === toolParams.name);
+      
+      if (!server) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          error: {
+            code: -32602,
+            message: `Server '${toolParams.name}' not found`
+          },
+          id: message.id
+        });
+      }
+      
+      if (!server.enabled) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          result: {
+            data: { success: true, message: `Server '${toolParams.name}' is already disabled` }
+          },
+          id: message.id
+        });
+      }
+      
+      server.enabled = false;
+      saveConfig(config);
+      
+      return sendResponse({
+        jsonrpc: '2.0',
+        result: {
+          data: { success: true, message: `Server '${toolParams.name}' disabled` }
+        },
+        id: message.id
+      });
+    }
+    
+    return sendResponse({
+      jsonrpc: '2.0',
+      error: {
+        code: -32601,
+        message: 'Method not found'
+      },
+      id: message.id
+    });
+  }
+  
+  // Default response for unhandled methods
+  log('Unhandled method:', message.method);
+  sendResponse({
+    jsonrpc: '2.0',
+    error: {
+      code: -32601,
+      message: 'Method not found'
+    },
+    id: message.id || null
+  });
+}
 
-// Connect the server to the standard I/O transport
-const transport = new StdioTransport();
-server.listen(transport);
+// Send response to stdout
+function sendResponse(response) {
+  log('Sending response:', response);
+  // Use process.stdout.write to avoid adding newlines
+  process.stdout.write(JSON.stringify(response) + '\n');
+}
 
 // Log startup
 log('MCP server started');
@@ -178,3 +338,12 @@ log('Environment variables:', JSON.stringify({
 }));
 log('Current working directory:', process.cwd());
 log('Waiting for client messages...');
+
+// Send an initial notification to stdout to help with debugging
+process.stdout.write(JSON.stringify({
+  jsonrpc: '2.0',
+  method: 'notification',
+  params: {
+    message: 'MCP server ready for connection'
+  }
+}) + '\n');
