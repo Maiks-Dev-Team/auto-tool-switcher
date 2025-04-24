@@ -253,20 +253,15 @@ function handleMessage(message) {
   if (message.method === 'tools/list') {
     log('Handling tools/list request');
     
-    // Define our core tools
+    // Define our core tools - IMPORTANT: Use mcp0_ prefix for Cascade compatibility
     const coreTools = [
       {
-        name: 'servers_list',
+        name: 'mcp0_servers_list',
         description: 'List all available MCP servers',
         parameters: {}
       },
       {
-        name: 'mcp0_servers_list',
-        description: 'This is a tool from the auto-tool-switcher MCP server.\nList all available MCP servers',
-        parameters: {}
-      },
-      {
-        name: 'servers_enable',
+        name: 'mcp0_servers_enable',
         description: 'Enable a specific MCP server',
         parameters: {
           type: 'object',
@@ -280,15 +275,7 @@ function handleMessage(message) {
         }
       },
       {
-        name: 'mcp0_servers_enable',
-        description: 'This is a tool from the auto-tool-switcher MCP server.\nEnable a specific MCP server',
-        parameters: {
-          type: 'object',
-          properties: {}
-        }
-      },
-      {
-        name: 'servers_disable',
+        name: 'mcp0_servers_disable',
         description: 'Disable a specific MCP server',
         parameters: {
           type: 'object',
@@ -302,21 +289,8 @@ function handleMessage(message) {
         }
       },
       {
-        name: 'mcp0_servers_disable',
-        description: 'This is a tool from the auto-tool-switcher MCP server.\nDisable a specific MCP server',
-        parameters: {
-          type: 'object',
-          properties: {}
-        }
-      },
-      {
-        name: 'refresh_tools',
-        description: 'Refresh the list of tools from all enabled servers',
-        parameters: {}
-      },
-      {
         name: 'mcp0_refresh_tools',
-        description: 'This is a tool from the auto-tool-switcher MCP server.\nRefresh the list of tools from all enabled servers',
+        description: 'Refresh the list of tools from all enabled servers',
         parameters: {}
       }
     ];
@@ -341,7 +315,7 @@ function handleMessage(message) {
     const toolName = message.params?.name;
     const toolParams = message.params?.parameters || {};
     
-    if (toolName === 'servers_list' || toolName === 'mcp0_servers_list') {
+    if (toolName === 'mcp0_servers_list') {
       const config = getConfig();
       
       // Format the output to be more clear
@@ -373,7 +347,7 @@ function handleMessage(message) {
       });
     }
     
-    if (toolName === 'servers_enable' || toolName === 'mcp0_servers_enable') {
+    if (toolName === 'mcp0_servers_enable') {
       // For mcp0_ prefixed tools, use a default server if name is not provided
       const serverName = toolParams.name || (toolName.startsWith('mcp0_') ? 'MCP Beta' : undefined);
       
@@ -430,6 +404,15 @@ function handleMessage(message) {
       // Update the tool cache with tools from the newly enabled server
       updateCachedTools().then(() => {
         log(`Updated tool cache after enabling ${serverName}. Now have ${cachedServerTools.length} tools.`);
+        
+        // Send update/tools notification to inform clients about new tools
+        process.stdout.write(JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'update/tools',
+          params: {
+            message: `Added tools from server: ${serverName}`
+          }
+        }) + '\n');
       }).catch(err => {
         log(`Error updating tool cache after enabling ${serverName}:`, err);
       });
@@ -451,7 +434,7 @@ function handleMessage(message) {
       });
     }
     
-    if (toolName === 'servers_disable' || toolName === 'mcp0_servers_disable') {
+    if (toolName === 'mcp0_servers_disable') {
       // For mcp0_ prefixed tools, use a default server if name is not provided
       const serverName = toolParams.name || (toolName.startsWith('mcp0_') ? 'MCP Alpha' : undefined);
       
@@ -501,6 +484,15 @@ function handleMessage(message) {
       cachedServerTools = cachedServerTools.filter(tool => !tool.name.startsWith(`${serverPrefix}_`));
       const removedCount = previousToolCount - cachedServerTools.length;
       
+      // Send update/tools notification to inform clients about removed tools
+      process.stdout.write(JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'update/tools',
+        params: {
+          message: `Removed ${removedCount} tools from server: ${serverName}`
+        }
+      }) + '\n');
+      
       log(`Removed ${removedCount} tools from ${serverName} after disabling`);
       
       return sendResponse({
@@ -522,12 +514,21 @@ function handleMessage(message) {
     }
     
     // Handle refresh_tools
-    if (toolName === 'refresh_tools' || toolName === 'mcp0_refresh_tools') {
+    if (toolName === 'mcp0_refresh_tools') {
       log('Handling refresh_tools request');
       
       // Update the tool cache
       updateCachedTools().then(() => {
         log(`Refreshed tool cache. Now have ${cachedServerTools.length} tools.`);
+        
+        // Send update/tools notification to inform clients about refreshed tools
+        process.stdout.write(JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'update/tools',
+          params: {
+            message: `Refreshed tool cache. Now have ${cachedServerTools.length} tools.`
+          }
+        }) + '\n');
       }).catch(err => {
         log('Error refreshing tool cache:', err);
       });
@@ -633,6 +634,15 @@ log('Current working directory:', process.cwd());
 // Initialize the tool cache on startup
 updateCachedTools().then(() => {
   log(`Initialized tool cache with ${cachedServerTools.length} tools from enabled servers`);
+  
+  // Send update/tools notification to inform clients about available tools
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'update/tools',
+    params: {
+      message: `Initialized with ${cachedServerTools.length} tools from enabled servers`
+    }
+  }) + '\n');
 }).catch(err => {
   log('Error initializing tool cache:', err);
 });
