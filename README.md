@@ -5,17 +5,15 @@
 > **⚠️ Early Stage:** This project is in the early stages of development. Features are experimental, incomplete, and subject to rapid change.
 
 ## ✨ Overview
-MCP Auto Tool Switcher is a system for managing [MCP](https://github.com/your-mcp-link) servers, tools, prompts, and resources. It consists of two main components:
-
-1. **Electron Tray Client**: A system tray application for managing MCP servers
-2. **Cascade MCP Server**: A modular MCP server that acts as a passthrough for tools from other MCP servers
+MCP Auto Tool Switcher is a system for managing [MCP](https://github.com/your-mcp-link) servers, tools, prompts, and resources. It is a modular MCP server that acts as a passthrough for tools from other MCP servers.
 
 ### Features
 - **Cross-platform:** Works on Windows, macOS, and Linux
-- **Modern UI:** Accessible from your system tray for instant access
-- **Server Management:** Add, remove, enable/disable, and configure MCP servers
+- **Server Management:** Add, remove, enable/disable, and configure MCP servers via MCP tools
 - **Tool/Prompt/Resource Discovery:** List, invoke, and preview MCP tools, prompts, and resources
 - **Server Tool Forwarding:** Act as a passthrough for tools from other MCP servers
+- **Automatic Server Startup:** Automatically starts all enabled MCP servers on initialization
+- **Intelligent Tool Caching:** Implements efficient caching for improved performance
 
 ## 📖 Documentation
 
@@ -23,23 +21,7 @@ For complete documentation, see the [docs folder](./docs/index.md).
 
 ## 🚀 Quick Start
 
-### Electron Tray Client
-
-1. **Install dependencies:**
-   ```sh
-   npm install
-   ```
-
-2. **Start the Electron tray client:**
-   ```sh
-   npm start
-   ```
-
-3. **Use the tray icon:**
-   - Right-click the tray icon to access all MCP server management features
-   - Add/remove/edit servers, list/invoke tools, run prompts, preview resources
-
-### Cascade MCP Server
+### Auto Tool Switcher
 
 1. **Install dependencies:**
    ```sh
@@ -61,6 +43,14 @@ For complete documentation, see the [docs folder](./docs/index.md).
 
 - All server configuration is stored in [`servers.json`](./servers.json)
 - MCP server configurations are stored in [`mcp-config.json`](./mcp-config.json)
+
+## 🔮 Future Improvements
+
+- **Electron Tray Client**: A system tray application for managing MCP servers with:
+  - System tray/menu bar icon for easy access
+  - Context menu for managing servers
+  - Dialogs for adding, editing, and removing servers
+  - Visual interface for tool discovery and invocation
 
 ## 🤝 Contributing
 
