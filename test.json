@@ -1,0 +1,39 @@
+{
+    "mcpServers": {
+      "auto-tool-switcher": {
+        "command": "npx",
+        "args": [
+          "@auto-tool-switcher/mcp@latest",
+          
+          {
+            "tool_limit": 60,
+            "mcpServers": {
+              "browsermcp": {
+                "command": "npx",
+                "args": [
+                  "@browsermcp/mcp@latest"
+                ]
+              },
+              "docker-mcp": {
+                "command": "cmd",
+                "args": [
+                  "/c",
+                  "npx",
+                  "-y",
+                  "@smithery/cli@latest",
+                  "run",
+                  "docker-mcp",
+                  "--key",
+                  "ace68547-3426-43d1-a6c1-79122037e09e"
+                ]
+              },
+              "todo": {
+                "command": "node",
+                "args": ["b:/Projects/MCP/todo-list-mcp/dist/index.js"]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }

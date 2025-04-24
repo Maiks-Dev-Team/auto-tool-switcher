@@ -1,0 +1,15 @@
+{
+  "tool_limit": 60,
+  "servers": [
+    {
+      "name": "MCP Alpha",
+      "url": "http://localhost:8000",
+      "enabled": true
+    },
+    {
+      "name": "MCP Beta",
+      "url": "http://localhost:8001",
+      "enabled": false
+    }
+  ]
+}
