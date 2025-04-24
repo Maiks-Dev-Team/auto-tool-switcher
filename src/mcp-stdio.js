@@ -54,15 +54,37 @@ function log(...args) {
 }
 
 // Read server configuration
-function getServersConfig() {
+function getConfig() {
   try {
     const configPath = path.resolve(__dirname, '../servers.json');
     const data = fs.readFileSync(configPath, 'utf-8');
-    return JSON.parse(data).servers || [];
+    return JSON.parse(data);
   } catch (e) {
     log('Error reading servers config:', e);
-    return [];
+    return { tool_limit: 60, servers: [] };
   }
+}
+
+// Get just the servers array
+function getServersConfig() {
+  return getConfig().servers || [];
+}
+
+// Save configuration to file
+function saveConfig(config) {
+  try {
+    const configPath = path.resolve(__dirname, '../servers.json');
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    return true;
+  } catch (e) {
+    log('Error writing servers config:', e);
+    return false;
+  }
+}
+
+// Count enabled servers
+function getEnabledCount(config) {
+  return config.servers.filter(s => s.enabled).length;
 }
 
 // Initialize readline interface
@@ -184,31 +206,100 @@ function handleMessage(message) {
     const toolParams = message.params?.parameters || {};
     
     if (toolName === 'servers/list') {
-      const config = getServersConfig();
+      const config = getConfig();
       return sendResponse({
         jsonrpc: '2.0',
         result: {
-          data: config
+          data: {
+            tool_limit: config.tool_limit,
+            servers: config.servers
+          }
         },
         id: message.id
       });
     }
     
     if (toolName === 'servers/enable' && toolParams.name) {
+      const config = getConfig();
+      const server = config.servers.find(s => s.name === toolParams.name);
+      
+      if (!server) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          error: {
+            code: -32602,
+            message: `Server '${toolParams.name}' not found`
+          },
+          id: message.id
+        });
+      }
+      
+      if (server.enabled) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          result: {
+            data: { success: true, message: `Server '${toolParams.name}' is already enabled` }
+          },
+          id: message.id
+        });
+      }
+      
+      const enabledCount = getEnabledCount(config);
+      if (enabledCount >= config.tool_limit) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          error: {
+            code: -32602,
+            message: `Tool limit (${config.tool_limit}) reached. Disable another server first.`
+          },
+          id: message.id
+        });
+      }
+      
+      server.enabled = true;
+      saveConfig(config);
+      
       return sendResponse({
         jsonrpc: '2.0',
         result: {
-          data: { success: true, message: `Server ${toolParams.name} enabled` }
+          data: { success: true, message: `Server '${toolParams.name}' enabled` }
         },
         id: message.id
       });
     }
     
     if (toolName === 'servers/disable' && toolParams.name) {
+      const config = getConfig();
+      const server = config.servers.find(s => s.name === toolParams.name);
+      
+      if (!server) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          error: {
+            code: -32602,
+            message: `Server '${toolParams.name}' not found`
+          },
+          id: message.id
+        });
+      }
+      
+      if (!server.enabled) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          result: {
+            data: { success: true, message: `Server '${toolParams.name}' is already disabled` }
+          },
+          id: message.id
+        });
+      }
+      
+      server.enabled = false;
+      saveConfig(config);
+      
       return sendResponse({
         jsonrpc: '2.0',
         result: {
-          data: { success: true, message: `Server ${toolParams.name} disabled` }
+          data: { success: true, message: `Server '${toolParams.name}' disabled` }
         },
         id: message.id
       });
