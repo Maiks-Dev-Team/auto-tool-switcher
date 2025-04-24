@@ -8,7 +8,19 @@ const LOG_PATH = path.resolve(__dirname, '../auto-tool-switcher.log');
 function log(...args) {
   const msg = `[${new Date().toISOString()}] ` + args.join(' ');
   try {
-    fs.appendFileSync(LOG_PATH, msg + '\n');
+    // Clear log file if it's getting too large
+    try {
+      const stats = fs.statSync(LOG_PATH);
+      if (stats.size > 1024 * 1024) { // 1MB
+        fs.writeFileSync(LOG_PATH, '', 'utf8');
+        console.log('Log file cleared due to size');
+      }
+    } catch (e) {
+      // File doesn't exist, will be created
+    }
+    
+    // Write with explicit utf8 encoding
+    fs.appendFileSync(LOG_PATH, msg + '\n', 'utf8');
   } catch (e) {
     console.error('[LOG ERROR]', e);
   }
@@ -95,12 +107,26 @@ app.get('/mcp/test', (req, res) => {
 // Required MCP protocol endpoints
 app.get('/mcp/info', (req, res) => {
   log('[MCP] MCP info request received');
+  log('[MCP] Client detected:', req.headers['user-agent'] || 'Unknown');
+  log('[MCP] Client IP:', req.ip || req.connection.remoteAddress || 'Unknown');
+  
   res.json({
     name: 'Auto Tool Switcher',
     version: '1.0.0',
     description: 'MCP Auto Tool Switcher server for enabling/disabling MCP servers with a configurable tool limit.',
     capabilities: ['tools/list', 'servers/enable', 'servers/disable'],
     protocol_version: '1.0'
+  });
+});
+
+// Special endpoint for MCP client detection
+app.get('/mcp-client-check', (req, res) => {
+  log('[MCP] MCP client check endpoint accessed');
+  log('[MCP] Headers:', JSON.stringify(req.headers, null, 2));
+  res.json({
+    detected: true,
+    message: 'MCP client connection successful',
+    timestamp: new Date().toISOString()
   });
 });
 
