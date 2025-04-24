@@ -103,7 +103,30 @@ app.use((req, res, next) => {
 // Minimal MCP endpoints for discovery
 app.get('/status', (req, res) => {
   log('[MCP] Status request received');
-  res.json({ status: 'ok', type: 'auto-tool-switcher' });
+  log('[MCP] Client detected:', req.headers['user-agent'] || 'Unknown');
+  res.json({ 
+    status: 'ok', 
+    type: 'auto-tool-switcher',
+    mcp_compatible: true,
+    version: '1.0.0'
+  });
+});
+
+// Root endpoint for basic connectivity check
+app.get('/', (req, res) => {
+  log('[MCP] Root endpoint accessed');
+  log('[MCP] Client detected:', req.headers['user-agent'] || 'Unknown');
+  res.json({ 
+    name: 'Auto Tool Switcher MCP Server',
+    status: 'running',
+    endpoints: [
+      '/status',
+      '/tools/list',
+      '/servers',
+      '/mcp/info',
+      '/mcp/health'
+    ]
+  });
 });
 
 // Additional test endpoint for MCP client connectivity
