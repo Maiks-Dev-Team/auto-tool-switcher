@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "auto-tool-switcher": {
+      "command": "node",
+      "args": [
+        "b:\\Projects\\MCP\\auto-tool-switcher\\cascade-integration.js"
+      ],
+      "env": {}
+    }
+  }
+}
