@@ -155,12 +155,12 @@ function handleMessage(message) {
       result: {
         tools: [
           {
-            name: 'servers/list',
+            name: 'servers_list',
             description: 'List all available MCP servers',
             parameters: {}
           },
           {
-            name: 'servers/enable',
+            name: 'servers_enable',
             description: 'Enable a specific MCP server',
             parameters: {
               type: 'object',
@@ -174,7 +174,7 @@ function handleMessage(message) {
             }
           },
           {
-            name: 'servers/disable',
+            name: 'servers_disable',
             description: 'Disable a specific MCP server',
             parameters: {
               type: 'object',
@@ -199,7 +199,7 @@ function handleMessage(message) {
     const toolName = message.params?.name;
     const toolParams = message.params?.parameters || {};
     
-    if (toolName === 'servers/list') {
+    if (toolName === 'servers_list') {
       const config = getConfig();
       return sendResponse({
         jsonrpc: '2.0',
@@ -213,7 +213,7 @@ function handleMessage(message) {
       });
     }
     
-    if (toolName === 'servers/enable' && toolParams.name) {
+    if (toolName === 'servers_enable' && toolParams.name) {
       const config = getConfig();
       const server = config.servers.find(s => s.name === toolParams.name);
       
@@ -262,7 +262,7 @@ function handleMessage(message) {
       });
     }
     
-    if (toolName === 'servers/disable' && toolParams.name) {
+    if (toolName === 'servers_disable' && toolParams.name) {
       const config = getConfig();
       const server = config.servers.find(s => s.name === toolParams.name);
       
