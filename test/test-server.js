@@ -8,7 +8,7 @@ const fs = require('fs');
 
 // Start the server
 console.log('Starting Cascade MCP Server...');
-const server = spawn('node', ['cascade-mcp-server.js'], {
+const server = spawn('node', ['../cascade-mcp-server.js'], {
   cwd: __dirname,
   stdio: ['pipe', 'pipe', 'pipe']
 });
