@@ -2,15 +2,10 @@
  * Auto Tool Switcher MCP Server
  * Based on the Model Context Protocol
  */
-import { createMcpServer, StdioTransport } from '@modelcontextprotocol/sdk';
-import { z } from 'zod';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-// Get the directory name
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const { createMcpServer, StdioTransport } = require('@modelcontextprotocol/sdk');
+const { z } = require('zod');
+const fs = require('fs');
+const path = require('path');
 
 // Setup logging
 const LOG_PATH = path.resolve(__dirname, './auto-tool-switcher.log');

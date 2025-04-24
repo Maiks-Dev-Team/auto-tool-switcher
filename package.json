@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "MCP Auto Tool Switcher server for enabling/disabling MCP servers with a configurable tool limit.",
   "main": "electron.js",
-  "type": "module",
   "scripts": {
     "start": "electron .",
     "server": "node src/index.js",
