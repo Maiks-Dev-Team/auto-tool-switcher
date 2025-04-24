@@ -25,6 +25,7 @@ Desktop.ini
 # Tests/coverage
 coverage/
 .nyc_output/
+tests/
 
 # Misc
 *.swp
