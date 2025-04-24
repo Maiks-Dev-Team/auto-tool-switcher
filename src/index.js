@@ -463,11 +463,16 @@ app.get('/servers', listServers);
 app.post('/servers/enable', enableServer);
 app.post('/servers/disable', disableServer);
 
-// Log server startup
-app.listen(PORT, () => {
-  log('[MCP] Server listening on port', PORT);
-  log('[MCP] Server URL:', `http://localhost:${PORT}`);
-});
+// Only start Express server if not in MCP mode
+if (!isMcpClient) {
+  // Log server startup
+  app.listen(PORT, () => {
+    log('[MCP] Server listening on port', PORT);
+    log('[MCP] Server URL:', `http://localhost:${PORT}`);
+  });
+} else {
+  log('[MCP] Running in MCP stdio mode, Express server not started');
+}
 
 // Log all uncaught errors and promise rejections
 process.on('uncaughtException', err => {
