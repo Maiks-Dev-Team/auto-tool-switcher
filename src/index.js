@@ -3,47 +3,13 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const { log, ensureLogFile } = require('./logger');
+const mcpClient = require('./mcpClient');
 
-const LOG_PATH = path.resolve(__dirname, '../auto-tool-switcher.log');
+// Ensure log file exists
+ensureLogFile();
 
-// Create or clear the log file at startup
-try {
-  fs.writeFileSync(LOG_PATH, '', { encoding: 'utf8' });
-  console.log(`Log file initialized at ${LOG_PATH}`);
-} catch (e) {
-  console.error(`Failed to initialize log file: ${e.message}`);
-}
-
-/**
- * Log a message to both the console and log file
- * @param {...any} args - Arguments to log
- */
-function log(...args) {
-  // Format objects for better readability
-  const formattedArgs = args.map(arg => {
-    if (typeof arg === 'object' && arg !== null) {
-      try {
-        return JSON.stringify(arg, null, 2);
-      } catch (e) {
-        return '[Object]';
-      }
-    }
-    return arg;
-  });
-  
-  const timestamp = new Date().toISOString();
-  const msg = `[${timestamp}] ${formattedArgs.join(' ')}`;
-  
-  // Log to console
-  console.log(msg);
-  
-  // Log to file with error handling
-  try {
-    fs.appendFileSync(LOG_PATH, msg + '\n', { encoding: 'utf8', flag: 'a' });
-  } catch (e) {
-    console.error(`Failed to write to log file: ${e.message}`);
-  }
-}
+// Log function is now imported from logger.js
 
 const app = express();
 const PORT = 12345;
@@ -205,27 +171,45 @@ app.get('/mcp/health', (req, res) => {
 // Import getServersConfig from shared utils after setting up basic server
 const { getServersConfig } = require('./utils');
 
-// Define fetchToolsList function
-function fetchToolsList(url) {
-  return new Promise((resolve) => {
-    const endpoint = url.replace(/\/$/, '') + '/tools/list';
-    http.get(endpoint, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(json.tools || []);
-        } catch {
-          resolve([]);
-        }
-      });
-    }).on('error', () => resolve([]));
-  });
+// Define fetchToolsList function - now uses MCP client for JSON-RPC communication
+async function fetchToolsList(url) {
+  try {
+    // First try to get tools using JSON-RPC protocol
+    const tools = await mcpClient.getToolsList(url);
+    if (tools && tools.length > 0) {
+      return tools;
+    }
+    
+    // Fallback to HTTP API if JSON-RPC fails
+    return new Promise((resolve) => {
+      const endpoint = url.replace(/\/$/, '') + '/tools/list';
+      http.get(endpoint, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            resolve(json.tools || []);
+          } catch {
+            resolve([]);
+          }
+        });
+      }).on('error', () => resolve([]));
+    });
+  } catch (e) {
+    log(`[ERROR] Failed to fetch tools from ${url}:`, e);
+    return [];
+  }
 }
 
 // Import serverManager functions after defining fetchToolsList
-const { listServers, enableServer, disableServer } = require('./serverManager');
+const { 
+  listServers, 
+  enableServer, 
+  disableServer, 
+  initializeEnabledServers, 
+  shutdownAllServers 
+} = require('./serverManager');
 
 // Implement MCP protocol with stdio transport
 
@@ -481,17 +465,29 @@ process.on('unhandledRejection', err => {
 // Log process exit
 process.on('exit', code => {
   log('[MCP] Process exiting with code:', code);
+  // Shutdown all MCP servers on exit
+  shutdownAllServers();
 });
 
 // Log process signals
 process.on('SIGINT', () => {
   log('[MCP] Received SIGINT signal');
+  // Shutdown all MCP servers before exiting
+  shutdownAllServers();
   process.exit(0);
 });
 process.on('SIGTERM', () => {
   log('[MCP] Received SIGTERM signal');
+  // Shutdown all MCP servers before exiting
+  shutdownAllServers();
   process.exit(0);
 });
+
+// Initialize all enabled MCP servers on startup
+if (!isMcpClient) {
+  // Only initialize servers when running in server mode, not MCP stdio mode
+  initializeEnabledServers();
+}
 
 // Log memory usage periodically
 setInterval(() => {
