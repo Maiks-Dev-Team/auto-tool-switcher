@@ -239,7 +239,8 @@ function handleMessage(message) {
 // Send response to stdout
 function sendResponse(response) {
   log('Sending response:', response);
-  console.log(JSON.stringify(response));
+  // Use process.stdout.write to avoid adding newlines
+  process.stdout.write(JSON.stringify(response) + '\n');
 }
 
 // Log startup
