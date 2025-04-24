@@ -257,6 +257,16 @@ function processMessage(message) {
       server.enabled = true;
       saveConfig(config);
       
+      // Send update/tools notification to inform clients about the change
+      process.stdout.write(JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'update/tools',
+        params: {
+          message: `Server '${serverName}' enabled`
+        }
+      }) + '\n');
+      log('Sent update/tools notification after enabling server');
+      
       const successResponse = {
         jsonrpc: '2.0',
         result: {
@@ -319,6 +329,16 @@ function processMessage(message) {
       
       server.enabled = false;
       saveConfig(config);
+      
+      // Send update/tools notification to inform clients about the change
+      process.stdout.write(JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'update/tools',
+        params: {
+          message: `Server '${serverName}' disabled`
+        }
+      }) + '\n');
+      log('Sent update/tools notification after disabling server');
       
       const successResponse = {
         jsonrpc: '2.0',
