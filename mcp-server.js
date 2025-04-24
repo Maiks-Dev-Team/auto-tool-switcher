@@ -234,16 +234,30 @@ function handleMessage(message) {
       });
     }
     
-    if ((toolName === 'servers_enable' || toolName === 'mcp0_servers_enable') && (toolParams.name || toolParams.name === '')) {
+    if (toolName === 'servers_enable' || toolName === 'mcp0_servers_enable') {
+      // For mcp0_ prefixed tools, use a default server if name is not provided
+      const serverName = toolParams.name || (toolName.startsWith('mcp0_') ? 'MCP Beta' : undefined);
+      
+      if (!serverName) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          error: {
+            code: -32602,
+            message: `Missing required parameter: name`
+          },
+          id: message.id
+        });
+      }
+      
       const config = getConfig();
-      const server = config.servers.find(s => s.name === toolParams.name);
+      const server = config.servers.find(s => s.name === serverName);
       
       if (!server) {
         return sendResponse({
           jsonrpc: '2.0',
           error: {
             code: -32602,
-            message: `Server '${toolParams.name}' not found`
+            message: `Server '${serverName}' not found`
           },
           id: message.id
         });
@@ -253,7 +267,7 @@ function handleMessage(message) {
         return sendResponse({
           jsonrpc: '2.0',
           result: {
-            data: { success: true, message: `Server '${toolParams.name}' is already enabled` }
+            data: { success: true, message: `Server '${serverName}' is already enabled` }
           },
           id: message.id
         });
@@ -277,22 +291,36 @@ function handleMessage(message) {
       return sendResponse({
         jsonrpc: '2.0',
         result: {
-          data: { success: true, message: `Server '${toolParams.name}' enabled` }
+          data: { success: true, message: `Server '${serverName}' enabled` }
         },
         id: message.id
       });
     }
     
-    if ((toolName === 'servers_disable' || toolName === 'mcp0_servers_disable') && (toolParams.name || toolParams.name === '')) {
+    if (toolName === 'servers_disable' || toolName === 'mcp0_servers_disable') {
+      // For mcp0_ prefixed tools, use a default server if name is not provided
+      const serverName = toolParams.name || (toolName.startsWith('mcp0_') ? 'MCP Alpha' : undefined);
+      
+      if (!serverName) {
+        return sendResponse({
+          jsonrpc: '2.0',
+          error: {
+            code: -32602,
+            message: `Missing required parameter: name`
+          },
+          id: message.id
+        });
+      }
+      
       const config = getConfig();
-      const server = config.servers.find(s => s.name === toolParams.name);
+      const server = config.servers.find(s => s.name === serverName);
       
       if (!server) {
         return sendResponse({
           jsonrpc: '2.0',
           error: {
             code: -32602,
-            message: `Server '${toolParams.name}' not found`
+            message: `Server '${serverName}' not found`
           },
           id: message.id
         });
@@ -302,7 +330,7 @@ function handleMessage(message) {
         return sendResponse({
           jsonrpc: '2.0',
           result: {
-            data: { success: true, message: `Server '${toolParams.name}' is already disabled` }
+            data: { success: true, message: `Server '${serverName}' is already disabled` }
           },
           id: message.id
         });
@@ -314,7 +342,7 @@ function handleMessage(message) {
       return sendResponse({
         jsonrpc: '2.0',
         result: {
-          data: { success: true, message: `Server '${toolParams.name}' disabled` }
+          data: { success: true, message: `Server '${serverName}' disabled` }
         },
         id: message.id
       });
