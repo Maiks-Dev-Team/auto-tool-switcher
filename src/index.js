@@ -2,7 +2,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
-const { listServers, enableServer, disableServer } = require('./serverManager');
 const http = require('http');
 
 const LOG_PATH = path.resolve(__dirname, '../auto-tool-switcher.log');
@@ -14,28 +13,6 @@ function log(...args) {
     console.error('[LOG ERROR]', e);
   }
   console.log(msg);
-}
-
-// Import getServersConfig from shared utils
-const { getServersConfig } = require('./utils');
-
-// Define fetchToolsList function
-function fetchToolsList(url) {
-  return new Promise((resolve) => {
-    const endpoint = url.replace(/\/$/, '') + '/tools/list';
-    http.get(endpoint, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(json.tools || []);
-        } catch {
-          resolve([]);
-        }
-      });
-    }).on('error', () => resolve([]));
-  });
 }
 
 const app = express();
@@ -87,11 +64,30 @@ app.get('/status', (req, res) => {
   res.json({ status: 'ok', type: 'auto-tool-switcher' });
 });
 
-// Define and export functions after they're used
-module.exports = {
-  getServersConfig,
-  fetchToolsList
-};
+// Import getServersConfig from shared utils after setting up basic server
+const { getServersConfig } = require('./utils');
+
+// Define fetchToolsList function
+function fetchToolsList(url) {
+  return new Promise((resolve) => {
+    const endpoint = url.replace(/\/$/, '') + '/tools/list';
+    http.get(endpoint, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          resolve(json.tools || []);
+        } catch {
+          resolve([]);
+        }
+      });
+    }).on('error', () => resolve([]));
+  });
+}
+
+// Import serverManager functions after defining fetchToolsList
+const { listServers, enableServer, disableServer } = require('./serverManager');
 
 // Server endpoints
 app.get('/tools/list', async (req, res) => {
@@ -159,3 +155,9 @@ setInterval(() => {
     heapUsed: (mem.heapUsed / 1024 / 1024).toFixed(2) + ' MB'
   });
 }, 30000); // Log every 30 seconds
+
+// Define and export functions after they're used
+module.exports = {
+  getServersConfig,
+  fetchToolsList
+};
