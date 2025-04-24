@@ -7,6 +7,9 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 
 // Setup logging
 const LOG_PATH = path.resolve(__dirname, './cascade-mcp-server.log');
@@ -47,6 +50,146 @@ function getConfig() {
     log('Error reading servers config:', e);
     return { tool_limit: 60, servers: [] };
   }
+}
+
+// Fetch tools from a server
+async function fetchToolsFromServer(server) {
+  return new Promise((resolve, reject) => {
+    log(`Fetching tools from server: ${server.name} at ${server.url}`);
+    
+    // Create a simple request to the server's tools/list endpoint
+    const requestData = JSON.stringify({
+      jsonrpc: '2.0',
+      id: Date.now(),
+      method: 'tools/list',
+      params: {}
+    });
+    
+    // Parse the URL to determine protocol
+    const serverUrl = new URL(server.url);
+    const options = {
+      hostname: serverUrl.hostname,
+      port: serverUrl.port,
+      path: '/mcp',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(requestData)
+      }
+    };
+    
+    // Choose http or https based on protocol
+    const requester = serverUrl.protocol === 'https:' ? https : http;
+    
+    const req = requester.request(options, (res) => {
+      let data = '';
+      
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(data);
+          if (response.result && response.result.tools) {
+            // Add server name prefix to each tool
+            const tools = response.result.tools.map(tool => {
+              // Create a prefixed version of the tool
+              return {
+                ...tool,
+                name: `${server.name.toLowerCase().replace(/\s+/g, '_')}_${tool.name}`,
+                description: `[From ${server.name}] ${tool.description || ''}`
+              };
+            });
+            resolve(tools);
+          } else {
+            reject(new Error(`Invalid response from server: ${data}`));
+          }
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    
+    req.on('error', (error) => {
+      log(`Error fetching tools from ${server.name}:`, error);
+      reject(error);
+    });
+    
+    // Set a timeout
+    req.setTimeout(5000, () => {
+      req.abort();
+      reject(new Error(`Request to ${server.name} timed out`));
+    });
+    
+    req.write(requestData);
+    req.end();
+  });
+}
+
+// Forward a tool call to the appropriate server
+async function forwardToolCall(server, toolName, toolParams, messageId) {
+  return new Promise((resolve, reject) => {
+    log(`Forwarding tool call to ${server.name} at ${server.url}: ${toolName}`);
+    
+    // Create the request to forward to the server
+    const requestData = JSON.stringify({
+      jsonrpc: '2.0',
+      id: messageId,
+      method: 'tools/call',
+      params: {
+        name: toolName,
+        parameters: toolParams
+      }
+    });
+    
+    // Parse the URL to determine protocol
+    const serverUrl = new URL(server.url);
+    const options = {
+      hostname: serverUrl.hostname,
+      port: serverUrl.port,
+      path: '/mcp',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(requestData)
+      }
+    };
+    
+    // Choose http or https based on protocol
+    const requester = serverUrl.protocol === 'https:' ? https : http;
+    
+    const req = requester.request(options, (res) => {
+      let data = '';
+      
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(data);
+          resolve(response);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    
+    req.on('error', (error) => {
+      log(`Error forwarding tool call to ${server.name}:`, error);
+      reject(error);
+    });
+    
+    // Set a timeout
+    req.setTimeout(5000, () => {
+      req.abort();
+      reject(new Error(`Request to ${server.name} timed out`));
+    });
+    
+    req.write(requestData);
+    req.end();
+  });
 }
 
 // Save configuration to file
@@ -131,8 +274,8 @@ function processMessage(message) {
   if (message.method === 'tools/list') {
     log('Handling tools/list request');
     
-    // Define our tools with the correct naming convention
-    const tools = [
+    // Define our core tools with the correct naming convention
+    const coreTools = [
       {
         name: 'mcp0_servers_list',
         description: 'List all available MCP servers',
@@ -173,12 +316,50 @@ function processMessage(message) {
       }
     ];
     
-    log('Returning tools list:', tools);
+    // Get tools from enabled servers
+    const config = getConfig();
+    const enabledServers = config.servers.filter(s => s.enabled);
+    let serverTools = [];
+    
+    // For each enabled server, try to fetch its tools
+    const fetchPromises = enabledServers.map(async server => {
+      try {
+        const tools = await fetchToolsFromServer(server);
+        return tools;
+      } catch (error) {
+        log(`Error fetching tools from ${server.name}:`, error);
+        return [];
+      }
+    });
+    
+    // Wait for all fetches to complete
+    Promise.all(fetchPromises)
+      .then(results => {
+        // Flatten the array of arrays
+        serverTools = results.flat();
+        log(`Fetched ${serverTools.length} tools from ${enabledServers.length} enabled servers`);
+        
+        // Send update/tools notification
+        process.stdout.write(JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'update/tools',
+          params: {
+            message: `Updated tool list with ${serverTools.length} tools from enabled servers`
+          }
+        }) + '\n');
+      })
+      .catch(error => {
+        log('Error fetching tools from servers:', error);
+      });
+    
+    // Combine core tools with any server tools we might already have
+    const allTools = [...coreTools, ...serverTools];
+    log(`Returning ${allTools.length} tools (${coreTools.length} core + ${serverTools.length} from servers)`);
     
     return sendResponse({
       jsonrpc: '2.0',
       result: {
-        tools: tools
+        tools: allTools
       },
       id: message.id
     });
@@ -417,6 +598,45 @@ function processMessage(message) {
         },
         id: message.id
       });
+    }
+    
+    // Check if this is a tool from an enabled server
+    // Extract the server prefix and actual tool name
+    const parts = toolName.split('_');
+    if (parts.length >= 2) {
+      const serverPrefix = parts[0];
+      const actualToolName = parts.slice(1).join('_');
+      
+      // Find the server by prefix
+      const config = getConfig();
+      const server = config.servers.find(s => 
+        s.name.toLowerCase().replace(/\s+/g, '_') === serverPrefix && s.enabled
+      );
+      
+      if (server) {
+        log(`Detected server tool: ${toolName} -> ${server.name} / ${actualToolName}`);
+        
+        // Forward the request to the actual server
+        forwardToolCall(server, actualToolName, toolParams, message.id)
+          .then(response => {
+            log(`Received response from ${server.name} for tool ${actualToolName}:`, response);
+            sendResponse(response);
+          })
+          .catch(error => {
+            log(`Error forwarding tool call to ${server.name}:`, error);
+            sendResponse({
+              jsonrpc: '2.0',
+              error: {
+                code: -32603,
+                message: `Error forwarding request to ${server.name}: ${error.message}`
+              },
+              id: message.id
+            });
+          });
+        
+        // Return here to prevent the default response
+        return;
+      }
     }
     
     // Default response for unknown tools
