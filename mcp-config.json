@@ -2,7 +2,7 @@
   "mcpServers": {
     "auto-tool-switcher": {
       "command": "C:\\Program Files\\nodejs\\node.exe",
-      "args": ["B:\\Projects\\MCP\\auto-tool-switcher\\mcp-server.js"],
+      "args": ["B:\\Projects\\MCP\\auto-tool-switcher\\cascade-integration.js"],
       "cwd": "B:\\Projects\\MCP\\auto-tool-switcher",
       "env": {
         "MCP_STDIO": "true"

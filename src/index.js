@@ -451,6 +451,9 @@ if (!isMcpClient) {
     log('[MCP] Server listening on port', PORT);
     log('[MCP] Server URL:', `http://localhost:${PORT}`);
   });
+  
+  // Initialize all enabled MCP servers on startup
+  initializeEnabledServers();
 } else {
   log('[MCP] Running in MCP stdio mode, Express server not started');
 }
@@ -484,11 +487,7 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-// Initialize all enabled MCP servers on startup
-if (!isMcpClient) {
-  // Only initialize servers when running in server mode, not MCP stdio mode
-  initializeEnabledServers();
-}
+// MCP servers are initialized only in HTTP server mode
 
 // Log memory usage periodically
 setInterval(() => {
