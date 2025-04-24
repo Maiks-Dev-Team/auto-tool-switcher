@@ -42,6 +42,46 @@ requiredFiles.forEach(file => {
   }
 });
 
+// Cache for tools from each server
+let toolsCache = {
+  builtIn: [
+    {
+      name: 'servers_list',
+      description: 'List all available MCP servers',
+      parameters: {}
+    },
+    {
+      name: 'servers_enable',
+      description: 'Enable a specific MCP server',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the server to enable'
+          }
+        },
+        required: ['name']
+      }
+    },
+    {
+      name: 'servers_disable',
+      description: 'Disable a specific MCP server',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the server to disable'
+          }
+        },
+        required: ['name']
+      }
+    }
+  ],
+  servers: {} // Will store tools for each server by server name
+};
+
 // Set up readline interface for reading from stdin
 const rl = readline.createInterface({
   input: process.stdin,
@@ -126,70 +166,10 @@ function handleMcpMessage(message, callback) {
     const enabledServers = getEnabledServers();
     log(`[MCP] Found ${enabledServers.length} enabled servers`);
     
-    // Our built-in tools
-    const builtInTools = [
-      {
-        name: 'servers_list',
-        description: 'List all available MCP servers',
-        parameters: {}
-      },
-      {
-        name: 'servers_enable',
-        description: 'Enable a specific MCP server',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'string',
-              description: 'Name of the server to enable'
-            }
-          },
-          required: ['name']
-        }
-      },
-      {
-        name: 'servers_disable',
-        description: 'Disable a specific MCP server',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'string',
-              description: 'Name of the server to disable'
-            }
-          },
-          required: ['name']
-        }
-      }
-    ];
-    
-    // Fetch tools from all enabled servers
-    const mcpClient = require('./mcpClient');
-    
-    // Use Promise.all to fetch tools from all enabled servers in parallel
-    Promise.all(enabledServers.map(async (server) => {
-      try {
-        log(`[MCP] Fetching tools from server: ${server.name} at ${server.url}`);
-        const tools = await mcpClient.getToolsList(server.url);
-        
-        // Prefix tool names with server name to avoid conflicts
-        return tools.map(tool => ({
-          ...tool,
-          name: `${server.name.toLowerCase().replace(/\s+/g, '_')}_${tool.name}`,
-          description: `[${server.name}] ${tool.description}`
-        }));
-      } catch (error) {
-        log(`[ERROR] Failed to fetch tools from server ${server.name}:`, error);
-        return [];
-      }
-    }))
-    .then(toolArrays => {
-      // Flatten the array of arrays into a single array of tools
-      const allServerTools = toolArrays.flat();
-      log(`[MCP] Aggregated ${allServerTools.length} tools from enabled servers`);
-      
-      // Combine built-in tools with server tools
-      const allTools = [...builtInTools, ...allServerTools];
+    // Update the tools cache if needed
+    updateToolsCache(enabledServers).then(() => {
+      // Get all tools from the cache
+      const allTools = getAllCachedTools();
       
       // Send the combined tools list
       callback({
@@ -199,14 +179,13 @@ function handleMcpMessage(message, callback) {
         },
         id: message.id
       });
-    })
-    .catch(error => {
-      log(`[ERROR] Failed to aggregate tools:`, error);
+    }).catch(error => {
+      log(`[ERROR] Failed to update tools cache:`, error);
       // Fall back to just our built-in tools if there was an error
       callback({
         jsonrpc: '2.0',
         result: {
-          tools: builtInTools
+          tools: toolsCache.builtIn
         },
         id: message.id
       });
@@ -370,6 +349,17 @@ async function handleToolCall(toolName, toolParams, messageId, callback) {
     });
   }
   
+  // Handle update/tools notification
+  if (message.method === 'update/tools' && !message.id) {
+    log('[MCP] Received update/tools notification');
+    // This is a notification, so we don't need to send a response
+    // Just update our tools cache
+    const { getEnabledServers } = require('./utils');
+    const enabledServers = getEnabledServers();
+    updateToolsCache(enabledServers);
+    return undefined;
+  }
+  
   // Default response for unhandled methods
   log('[MCP] Unhandled method:', message.method);
   callback({
@@ -394,6 +384,57 @@ process.on('unhandledRejection', err => {
 process.on('exit', code => {
   log('[MCP] Process exiting with code:', code);
 });
+
+/**
+ * Update the tools cache for all enabled servers
+ * @param {Array} enabledServers - List of enabled servers
+ * @returns {Promise} Promise that resolves when all tools are fetched
+ */
+async function updateToolsCache(enabledServers) {
+  const mcpClient = require('./mcpClient');
+  
+  // Use Promise.all to fetch tools from all enabled servers in parallel
+  const toolArrays = await Promise.all(enabledServers.map(async (server) => {
+    try {
+      log(`[MCP] Fetching tools from server: ${server.name} at ${server.url}`);
+      const tools = await mcpClient.getToolsList(server.url);
+      
+      // Prefix tool names with server name to avoid conflicts
+      const serverTools = tools.map(tool => ({
+        ...tool,
+        name: `${server.name.toLowerCase().replace(/\s+/g, '_')}_${tool.name}`,
+        description: `[${server.name}] ${tool.description}`
+      }));
+      
+      // Update the cache for this server
+      toolsCache.servers[server.name] = serverTools;
+      
+      return serverTools;
+    } catch (error) {
+      log(`[ERROR] Failed to fetch tools from server ${server.name}:`, error);
+      // If we already have tools for this server in the cache, keep them
+      return toolsCache.servers[server.name] || [];
+    }
+  }));
+  
+  // Flatten the array of arrays into a single array of tools
+  const allServerTools = toolArrays.flat();
+  log(`[MCP] Cached ${allServerTools.length} tools from enabled servers`);
+  
+  return allServerTools;
+}
+
+/**
+ * Get all tools from the cache
+ * @returns {Array} Combined list of built-in and server tools
+ */
+function getAllCachedTools() {
+  // Get all server tools from the cache
+  const serverTools = Object.values(toolsCache.servers).flat();
+  
+  // Combine built-in tools with server tools
+  return [...toolsCache.builtIn, ...serverTools];
+}
 
 // Log process signals
 process.on('SIGINT', () => {

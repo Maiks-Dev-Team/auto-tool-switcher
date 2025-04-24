@@ -72,11 +72,35 @@ function startMcpServer(serverName) {
       }
     );
     
-    // Log stdout and stderr
-    childProcess.stdout.on('data', (data) => {
-      log(`[${serverName}] [STDOUT] ${data.toString().trim()}`);
+    // Set up a readline interface to parse JSON-RPC messages from stdout
+    const readline = require('readline');
+    const rl = readline.createInterface({
+      input: childProcess.stdout,
+      terminal: false
     });
     
+    // Listen for JSON-RPC messages from the server
+    rl.on('line', (line) => {
+      try {
+        const message = JSON.parse(line);
+        
+        // Handle update/tools notifications
+        if (message.jsonrpc === '2.0' && message.method === 'update/tools' && !message.id) {
+          log(`[${serverName}] Received update/tools notification`);
+          // Forward this notification to our clients
+          process.stdout.write(JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'update/tools',
+            params: message.params
+          }) + '\n');
+        }
+      } catch (e) {
+        // Not a valid JSON-RPC message, just log it
+        log(`[${serverName}] [STDOUT] ${line}`);
+      }
+    });
+    
+    // Also log raw stderr
     childProcess.stderr.on('data', (data) => {
       log(`[${serverName}] [STDERR] ${data.toString().trim()}`);
     });
@@ -84,11 +108,13 @@ function startMcpServer(serverName) {
     // Handle process exit
     childProcess.on('exit', (code) => {
       log(`[MCP] Server "${serverName}" exited with code ${code}`);
+      rl.close();
     });
     
     // Handle errors
     childProcess.on('error', (err) => {
       log(`[ERROR] Failed to start server "${serverName}":`, err);
+      rl.close();
     });
     
     return childProcess;
