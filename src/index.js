@@ -227,7 +227,12 @@ function fetchToolsList(url) {
 // Import serverManager functions after defining fetchToolsList
 const { listServers, enableServer, disableServer } = require('./serverManager');
 
-// Add SSE endpoint for MCP client compatibility
+// Implement MCP protocol with SSE transport
+
+// Store active SSE connections
+let activeConnections = [];
+
+// MCP SSE endpoint for client connection
 app.get('/sse', (req, res) => {
   log('[MCP] SSE connection established');
   log('[MCP] Client details:', {
@@ -240,19 +245,191 @@ app.get('/sse', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   
   // Send initial connection message
-  res.write(`data: ${JSON.stringify({ type: 'connection_established', timestamp: new Date().toISOString() })}\n\n`);
+  const connectionId = Date.now().toString();
+  res.write(`data: ${JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'connection/established',
+    params: {
+      id: connectionId,
+      server: {
+        name: 'Auto Tool Switcher',
+        version: '1.0.0'
+      }
+    }
+  })}\n\n`);
+  
+  // Store connection
+  activeConnections.push({
+    id: connectionId,
+    res,
+    createdAt: new Date()
+  });
   
   // Keep connection alive with heartbeat
   const heartbeatInterval = setInterval(() => {
-    res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+    try {
+      res.write(`data: ${JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'connection/heartbeat',
+        params: {
+          timestamp: new Date().toISOString()
+        }
+      })}\n\n`);
+    } catch (e) {
+      log('[MCP] Error sending heartbeat:', e.message);
+      clearInterval(heartbeatInterval);
+    }
   }, 30000);
   
   // Handle client disconnect
   req.on('close', () => {
-    log('[MCP] SSE connection closed');
+    log('[MCP] SSE connection closed for', connectionId);
     clearInterval(heartbeatInterval);
+    activeConnections = activeConnections.filter(conn => conn.id !== connectionId);
+  });
+});
+
+// MCP message endpoint for client-to-server communication
+app.post('/messages', express.json(), (req, res) => {
+  log('[MCP] Received message from client:', req.body);
+  
+  // Process the message based on MCP protocol
+  const message = req.body;
+  
+  if (!message.jsonrpc || message.jsonrpc !== '2.0') {
+    return res.status(400).json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32600,
+        message: 'Invalid Request'
+      },
+      id: message.id || null
+    });
+  }
+  
+  // Handle initialization request
+  if (message.method === 'initialize') {
+    return res.json({
+      jsonrpc: '2.0',
+      result: {
+        server: {
+          name: 'Auto Tool Switcher',
+          version: '1.0.0'
+        },
+        capabilities: {
+          tools: {
+            supported: true
+          }
+        }
+      },
+      id: message.id
+    });
+  }
+  
+  // Handle tools/list request
+  if (message.method === 'tools/list') {
+    return res.json({
+      jsonrpc: '2.0',
+      result: {
+        tools: [
+          {
+            name: 'servers/list',
+            description: 'List all available MCP servers',
+            parameters: {}
+          },
+          {
+            name: 'servers/enable',
+            description: 'Enable a specific MCP server',
+            parameters: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                  description: 'Name of the server to enable'
+                }
+              },
+              required: ['name']
+            }
+          },
+          {
+            name: 'servers/disable',
+            description: 'Disable a specific MCP server',
+            parameters: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                  description: 'Name of the server to disable'
+                }
+              },
+              required: ['name']
+            }
+          }
+        ]
+      },
+      id: message.id
+    });
+  }
+  
+  // Handle tools/call request
+  if (message.method === 'tools/call') {
+    const toolName = message.params?.name;
+    const toolParams = message.params?.parameters || {};
+    
+    if (toolName === 'servers/list') {
+      const config = getServersConfig();
+      return res.json({
+        jsonrpc: '2.0',
+        result: {
+          data: config
+        },
+        id: message.id
+      });
+    }
+    
+    if (toolName === 'servers/enable' && toolParams.name) {
+      // Logic to enable a server
+      return res.json({
+        jsonrpc: '2.0',
+        result: {
+          data: { success: true, message: `Server ${toolParams.name} enabled` }
+        },
+        id: message.id
+      });
+    }
+    
+    if (toolName === 'servers/disable' && toolParams.name) {
+      // Logic to disable a server
+      return res.json({
+        jsonrpc: '2.0',
+        result: {
+          data: { success: true, message: `Server ${toolParams.name} disabled` }
+        },
+        id: message.id
+      });
+    }
+    
+    return res.status(400).json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32601,
+        message: 'Method not found'
+      },
+      id: message.id
+    });
+  }
+  
+  // Default response for unhandled methods
+  res.status(400).json({
+    jsonrpc: '2.0',
+    error: {
+      code: -32601,
+      message: 'Method not found'
+    },
+    id: message.id || null
   });
 });
 
