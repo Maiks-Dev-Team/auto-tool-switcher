@@ -140,11 +140,33 @@ app.get('/mcp/info', (req, res) => {
 // Special endpoint for MCP client detection
 app.get('/mcp-client-check', (req, res) => {
   log('[MCP] MCP client check endpoint accessed');
-  log('[MCP] Headers:', JSON.stringify(req.headers, null, 2));
+  log('[MCP] Headers:', req.headers);
   res.json({
     detected: true,
     message: 'MCP client connection successful',
     timestamp: new Date().toISOString()
+  });
+});
+
+// Specific endpoint for Codeium MCP client testing
+app.get('/codeium-mcp-test', (req, res) => {
+  log('[MCP] Codeium MCP client test endpoint accessed');
+  log('[MCP] Client details:', {
+    ip: req.ip || req.connection.remoteAddress,
+    userAgent: req.headers['user-agent'],
+    time: new Date().toISOString()
+  });
+  
+  // Send a response that the Codeium client can parse
+  res.json({
+    status: 'success',
+    message: 'Codeium MCP client connection verified',
+    server_info: {
+      name: 'Auto Tool Switcher',
+      version: '1.0.0',
+      tools_count: 0,
+      uptime: process.uptime()
+    }
   });
 });
 
