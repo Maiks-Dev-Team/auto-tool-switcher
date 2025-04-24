@@ -1,32 +1,18 @@
 /**
- * Cascade Integration for Auto Tool Switcher
+ * Simple MCP Server for Auto Tool Switcher
  * 
- * This file implements a custom integration between the Auto Tool Switcher
- * and the Cascade interface, providing reliable tool registration and execution.
+ * This is a simplified version of the MCP server that focuses only on
+ * implementing the core MCP tools for the Auto Tool Switcher.
  */
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 
 // Setup logging
-const LOG_PATH = path.resolve(__dirname, './auto-tool-switcher.log');
+const LOG_PATH = path.resolve(__dirname, './simple-mcp-server.log');
+fs.writeFileSync(LOG_PATH, '', { encoding: 'utf8' });
 
-// Ensure log file exists
-function ensureLogFile() {
-  try {
-    fs.writeFileSync(LOG_PATH, '', { encoding: 'utf8' });
-    console.error(`Created log file at ${LOG_PATH}`);
-    return true;
-  } catch (e) {
-    console.error(`Failed to create log file: ${e.message}`);
-    return false;
-  }
-}
-
-// Initialize log file
-ensureLogFile();
-
-// Log function with error handling
+// Log function
 function log(...args) {
   const timestamp = new Date().toISOString();
   const formattedArgs = args.map(arg => {
@@ -40,12 +26,9 @@ function log(...args) {
     return arg;
   });
   
-  const msg = `[${timestamp}] [CASCADE-INTEGRATION] ${formattedArgs.join(' ')}`;
+  const msg = `[${timestamp}] ${formattedArgs.join(' ')}`;
   
   try {
-    // Also log to console for debugging
-    console.error(msg);
-    
     // Write to log file
     fs.appendFileSync(LOG_PATH, msg + '\n', { encoding: 'utf8' });
   } catch (e) {
@@ -96,7 +79,8 @@ rl.on('line', (line) => {
     const message = JSON.parse(line);
     log('Received message:', message);
     
-    handleMessage(message);
+    // Process the message
+    processMessage(message);
   } catch (error) {
     log('Error processing message:', error);
     sendResponse({
@@ -110,14 +94,8 @@ rl.on('line', (line) => {
   }
 });
 
-// Handle process exit
-process.on('exit', () => {
-  log('Process exiting, closing readline interface');
-  rl.close();
-});
-
-// Handle message based on method
-function handleMessage(message) {
+// Process incoming messages
+function processMessage(message) {
   if (!message.jsonrpc || message.jsonrpc !== '2.0') {
     return sendResponse({
       jsonrpc: '2.0',
@@ -153,38 +131,22 @@ function handleMessage(message) {
   if (message.method === 'tools/list') {
     log('Handling tools/list request');
     
-    // Define our tools with CASCADE-COMPATIBLE NAMING
+    // Define our tools
     const tools = [
       {
-        name: 'mcp0_servers_list',
+        name: 'mcp0_mcp0_servers_list',
         description: 'List all available MCP servers',
         parameters: {}
       },
       {
-        name: 'mcp0_servers_enable',
+        name: 'mcp0_mcp0_servers_enable',
         description: 'Enable a specific MCP server',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'string',
-              description: 'Name of the server to enable'
-            }
-          }
-        }
+        parameters: {}
       },
       {
-        name: 'mcp0_servers_disable',
+        name: 'mcp0_mcp0_servers_disable',
         description: 'Disable a specific MCP server',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'string',
-              description: 'Name of the server to disable'
-            }
-          }
-        }
+        parameters: {}
       }
     ];
     
@@ -207,7 +169,7 @@ function handleMessage(message) {
     
     log(`Processing tool call for: ${toolName} with params:`, toolParams);
     
-    if (toolName === 'mcp0_servers_list') {
+    if (toolName === 'mcp0_mcp0_servers_list') {
       const config = getConfig();
       
       // Format the output to be more clear
@@ -217,7 +179,6 @@ function handleMessage(message) {
         status: server.enabled ? 'ENABLED' : 'DISABLED'
       }));
       
-      // Log the formatted servers to help with debugging
       log('Formatted servers:', formattedServers);
       
       // Return a more detailed and formatted response
@@ -238,12 +199,12 @@ function handleMessage(message) {
       return sendResponse(response);
     }
     
-    if (toolName === 'mcp0_servers_enable') {
-      // For simplicity, default to MCP Beta if no name provided
+    if (toolName === 'mcp0_mcp0_servers_enable') {
+      const config = getConfig();
       const serverName = toolParams.name || 'MCP Beta';
+      
       log(`Enabling server: ${serverName}`);
       
-      const config = getConfig();
       const server = config.servers.find(s => s.name === serverName);
       
       if (!server) {
@@ -315,12 +276,12 @@ function handleMessage(message) {
       return sendResponse(successResponse);
     }
     
-    if (toolName === 'mcp0_servers_disable') {
-      // For simplicity, default to MCP Alpha if no name provided
+    if (toolName === 'mcp0_mcp0_servers_disable') {
+      const config = getConfig();
       const serverName = toolParams.name || 'MCP Alpha';
+      
       log(`Disabling server: ${serverName}`);
       
-      const config = getConfig();
       const server = config.servers.find(s => s.name === serverName);
       
       if (!server) {
@@ -378,6 +339,7 @@ function handleMessage(message) {
       return sendResponse(successResponse);
     }
     
+    // Default response for unknown tools
     return sendResponse({
       jsonrpc: '2.0',
       error: {
@@ -403,12 +365,22 @@ function handleMessage(message) {
 // Send response to stdout
 function sendResponse(response) {
   log('Sending response:', response);
-  // Use process.stdout.write to avoid adding newlines
-  process.stdout.write(JSON.stringify(response) + '\n');
+  try {
+    // Use process.stdout.write to avoid adding newlines
+    process.stdout.write(JSON.stringify(response) + '\n');
+  } catch (error) {
+    log('Error sending response:', error);
+  }
 }
 
+// Handle process exit
+process.on('exit', () => {
+  log('Process exiting, closing readline interface');
+  rl.close();
+});
+
 // Log startup
-log('Cascade integration started');
+log('Simple MCP server started');
 log('Node version:', process.version);
 log('Process arguments:', process.argv);
 log('Current working directory:', process.cwd());
@@ -419,6 +391,6 @@ process.stdout.write(JSON.stringify({
   jsonrpc: '2.0',
   method: 'notification',
   params: {
-    message: 'Auto Tool Switcher ready for connection'
+    message: 'Simple MCP server ready for connection'
   }
 }) + '\n');
