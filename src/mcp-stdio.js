@@ -8,6 +8,25 @@ const readline = require('readline');
 
 // Setup logging
 const LOG_PATH = path.resolve(__dirname, '../auto-tool-switcher.log');
+
+// Ensure log file exists
+function ensureLogFile() {
+  try {
+    if (!fs.existsSync(LOG_PATH)) {
+      fs.writeFileSync(LOG_PATH, '', { encoding: 'utf8' });
+      console.error(`Created log file at ${LOG_PATH}`);
+    }
+    return true;
+  } catch (e) {
+    console.error(`Failed to create log file: ${e.message}`);
+    return false;
+  }
+}
+
+// Initialize log file
+ensureLogFile();
+
+// Log function with error handling
 function log(...args) {
   const timestamp = new Date().toISOString();
   const formattedArgs = args.map(arg => {
@@ -24,6 +43,10 @@ function log(...args) {
   const msg = `[${timestamp}] [MCP-STDIO] ${formattedArgs.join(' ')}`;
   
   try {
+    // Also log to console for debugging
+    console.error(msg);
+    
+    // Write to log file
     fs.appendFileSync(LOG_PATH, msg + '\n', { encoding: 'utf8' });
   } catch (e) {
     console.error(`Failed to write to log file: ${e.message}`);
