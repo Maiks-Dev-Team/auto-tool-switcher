@@ -10,6 +10,16 @@
       "name": "MCP Beta",
       "url": "http://localhost:8001",
       "enabled": false
+    },
+    {
+      "name": "browsermcp",
+      "url": "http://localhost:3000",
+      "enabled": false
+    },
+    {
+      "name": "todo",
+      "url": "http://localhost:3001",
+      "enabled": false
     }
   ]
 }
