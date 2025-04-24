@@ -165,6 +165,11 @@ function processMessage(message) {
           },
           required: ['name']
         }
+      },
+      {
+        name: 'mcp0_refresh_tools',
+        description: 'Refresh the list of tools from all enabled servers',
+        parameters: {}
       }
     ];
     
@@ -385,6 +390,33 @@ function processMessage(message) {
       };
       log('Server disabled successfully, sending response:', successResponse);
       return sendResponse(successResponse);
+    }
+    
+    // Handle refresh_tools
+    if (toolName === 'mcp0_refresh_tools') {
+      log('Handling refresh_tools request');
+      
+      // Send update/tools notification to inform clients about refreshed tools
+      process.stdout.write(JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'update/tools',
+        params: {
+          message: `Refreshed tool cache. Checking for tools from all enabled servers.`
+        }
+      }) + '\n');
+      log('Sent update/tools notification for refresh_tools');
+      
+      return sendResponse({
+        jsonrpc: '2.0',
+        result: {
+          data: { 
+            success: true, 
+            message: `Refreshing tools from all enabled servers...`,
+            enabled_servers: getEnabledCount(getConfig())
+          }
+        },
+        id: message.id
+      });
     }
     
     // Default response for unknown tools
