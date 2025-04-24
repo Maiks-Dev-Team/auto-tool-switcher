@@ -25,6 +25,7 @@ log('[MCP] Process arguments:', process.argv);
 log('[MCP] Environment:', process.env.NODE_ENV || 'development');
 
 // Log file system access
+const LOG_PATH = path.resolve(__dirname, '../auto-tool-switcher.log');
 try {
   const stat = fs.statSync(LOG_PATH);
   log('[MCP] Log file exists:', LOG_PATH);
