@@ -52,9 +52,21 @@ requiredFiles.forEach(file => {
 
 app.use(bodyParser.json());
 
-// Log all incoming requests
+// Log all incoming requests with detailed information
 app.use((req, res, next) => {
   log('[MCP] Incoming request:', req.method, req.url);
+  log('[MCP] Request headers:', JSON.stringify(req.headers, null, 2));
+  if (req.body && Object.keys(req.body).length > 0) {
+    log('[MCP] Request body:', JSON.stringify(req.body, null, 2));
+  }
+  
+  // Add response logging
+  const originalSend = res.send;
+  res.send = function(body) {
+    log('[MCP] Response:', res.statusCode, typeof body === 'object' ? JSON.stringify(body) : body);
+    return originalSend.apply(this, arguments);
+  };
+  
   next();
 });
 
@@ -62,6 +74,22 @@ app.use((req, res, next) => {
 app.get('/status', (req, res) => {
   log('[MCP] Status request received');
   res.json({ status: 'ok', type: 'auto-tool-switcher' });
+});
+
+// Additional test endpoint for MCP client connectivity
+app.get('/mcp/test', (req, res) => {
+  log('[MCP] Test endpoint accessed');
+  res.json({
+    success: true,
+    message: 'MCP server is running correctly',
+    timestamp: new Date().toISOString(),
+    serverInfo: {
+      name: 'Auto Tool Switcher',
+      version: '1.0.0',
+      nodeVersion: process.version,
+      platform: process.platform
+    }
+  });
 });
 
 // Import getServersConfig from shared utils after setting up basic server
