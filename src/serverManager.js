@@ -23,25 +23,42 @@ function getEnabledCount(config) {
 
 function listServers(req, res) {
   const config = readConfig();
-  res.json({
+  if (res) {
+    res.json({
+      tool_limit: config.tool_limit,
+      servers: config.servers
+    });
+  }
+  return {
     tool_limit: config.tool_limit,
     servers: config.servers
-  });
+  };
 }
 
-function enableServer(req, res) {
-  const { name } = req.body;
+function enableServer(nameOrReq, res) {
+  // Handle both direct function calls and HTTP requests
+  const name = typeof nameOrReq === 'string' ? nameOrReq : nameOrReq.body.name;
+  
   const config = readConfig();
   const enabledCount = getEnabledCount(config);
   const server = config.servers.find(s => s.name === name);
+  
   if (!server) {
-    return res.status(404).json({ error: 'Server not found' });
+    const error = { error: `Server '${name}' not found` };
+    if (res) res.status(404).json(error);
+    throw new Error(error.error);
   }
+  
   if (server.enabled) {
-    return res.json({ message: 'Server already enabled' });
+    const result = { message: `Server '${name}' is already enabled` };
+    if (res) res.json(result);
+    return result;
   }
+  
   if (enabledCount >= config.tool_limit) {
-    return res.status(400).json({ error: 'Tool limit reached. Disable another server first.' });
+    const error = { error: `Tool limit (${config.tool_limit}) reached. Disable another server first.` };
+    if (res) res.status(400).json(error);
+    throw new Error(error.error);
   }
   
   // Start the MCP server if it's defined in the MCP configuration
@@ -59,18 +76,29 @@ function enableServer(req, res) {
   
   server.enabled = true;
   writeConfig(config);
-  res.json({ message: 'Server enabled', servers: config.servers });
+  
+  const result = { message: `Server '${name}' enabled`, servers: config.servers };
+  if (res) res.json(result);
+  return result;
 }
 
-function disableServer(req, res) {
-  const { name } = req.body;
+function disableServer(nameOrReq, res) {
+  // Handle both direct function calls and HTTP requests
+  const name = typeof nameOrReq === 'string' ? nameOrReq : nameOrReq.body.name;
+  
   const config = readConfig();
   const server = config.servers.find(s => s.name === name);
+  
   if (!server) {
-    return res.status(404).json({ error: 'Server not found' });
+    const error = { error: `Server '${name}' not found` };
+    if (res) res.status(404).json(error);
+    throw new Error(error.error);
   }
+  
   if (!server.enabled) {
-    return res.json({ message: 'Server already disabled' });
+    const result = { message: `Server '${name}' is already disabled` };
+    if (res) res.json(result);
+    return result;
   }
   
   // Stop the MCP server if it's running
@@ -83,7 +111,10 @@ function disableServer(req, res) {
   
   server.enabled = false;
   writeConfig(config);
-  res.json({ message: 'Server disabled', servers: config.servers });
+  
+  const result = { message: `Server '${name}' disabled`, servers: config.servers };
+  if (res) res.json(result);
+  return result;
 }
 
 /**
