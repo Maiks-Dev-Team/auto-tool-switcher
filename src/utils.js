@@ -12,13 +12,23 @@ function getServersConfig() {
   try {
     const configPath = path.resolve(__dirname, '../servers.json');
     const data = fs.readFileSync(configPath, 'utf-8');
-    return JSON.parse(data).servers || [];
+    return JSON.parse(data) || { servers: [], tool_limit: 3 };
   } catch (e) {
     console.error('Error reading servers config:', e);
-    return [];
+    return { servers: [], tool_limit: 3 };
   }
 }
 
+/**
+ * Get only the enabled servers from the configuration
+ * @returns {Array} Array of enabled server objects
+ */
+function getEnabledServers() {
+  const config = getServersConfig();
+  return config.servers.filter(server => server.enabled);
+}
+
 module.exports = {
-  getServersConfig
+  getServersConfig,
+  getEnabledServers
 };

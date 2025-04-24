@@ -120,47 +120,101 @@ function handleMcpMessage(message, callback) {
   // Handle tools/list
   if (message.method === 'tools/list') {
     log('[MCP] Handling tools/list request');
-    return callback({
-      jsonrpc: '2.0',
-      result: {
-        tools: [
-          {
-            name: 'servers_list',
-            description: 'List all available MCP servers',
-            parameters: {}
-          },
-          {
-            name: 'servers_enable',
-            description: 'Enable a specific MCP server',
-            parameters: {
-              type: 'object',
-              properties: {
-                name: {
-                  type: 'string',
-                  description: 'Name of the server to enable'
-                }
-              },
-              required: ['name']
-            }
-          },
-          {
-            name: 'servers_disable',
-            description: 'Disable a specific MCP server',
-            parameters: {
-              type: 'object',
-              properties: {
-                name: {
-                  type: 'string',
-                  description: 'Name of the server to disable'
-                }
-              },
-              required: ['name']
-            }
-          }
-        ]
+    
+    // Get all enabled servers
+    const { getEnabledServers } = require('./utils');
+    const enabledServers = getEnabledServers();
+    log(`[MCP] Found ${enabledServers.length} enabled servers`);
+    
+    // Our built-in tools
+    const builtInTools = [
+      {
+        name: 'servers_list',
+        description: 'List all available MCP servers',
+        parameters: {}
       },
-      id: message.id
+      {
+        name: 'servers_enable',
+        description: 'Enable a specific MCP server',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Name of the server to enable'
+            }
+          },
+          required: ['name']
+        }
+      },
+      {
+        name: 'servers_disable',
+        description: 'Disable a specific MCP server',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Name of the server to disable'
+            }
+          },
+          required: ['name']
+        }
+      }
+    ];
+    
+    // Fetch tools from all enabled servers
+    const mcpClient = require('./mcpClient');
+    
+    // Use Promise.all to fetch tools from all enabled servers in parallel
+    Promise.all(enabledServers.map(async (server) => {
+      try {
+        log(`[MCP] Fetching tools from server: ${server.name} at ${server.url}`);
+        const tools = await mcpClient.getToolsList(server.url);
+        
+        // Prefix tool names with server name to avoid conflicts
+        return tools.map(tool => ({
+          ...tool,
+          name: `${server.name.toLowerCase().replace(/\s+/g, '_')}_${tool.name}`,
+          description: `[${server.name}] ${tool.description}`
+        }));
+      } catch (error) {
+        log(`[ERROR] Failed to fetch tools from server ${server.name}:`, error);
+        return [];
+      }
+    }))
+    .then(toolArrays => {
+      // Flatten the array of arrays into a single array of tools
+      const allServerTools = toolArrays.flat();
+      log(`[MCP] Aggregated ${allServerTools.length} tools from enabled servers`);
+      
+      // Combine built-in tools with server tools
+      const allTools = [...builtInTools, ...allServerTools];
+      
+      // Send the combined tools list
+      callback({
+        jsonrpc: '2.0',
+        result: {
+          tools: allTools
+        },
+        id: message.id
+      });
+    })
+    .catch(error => {
+      log(`[ERROR] Failed to aggregate tools:`, error);
+      // Fall back to just our built-in tools if there was an error
+      callback({
+        jsonrpc: '2.0',
+        result: {
+          tools: builtInTools
+        },
+        id: message.id
+      });
     });
+    
+    // Return undefined to prevent immediate response
+    // The response will be sent by the Promise chain above
+    return undefined;
   }
   
   // Handle tools/call
@@ -169,37 +223,60 @@ function handleMcpMessage(message, callback) {
     const toolName = message.params?.name;
     const toolParams = message.params?.parameters || {};
     
+    // Handle the request asynchronously
+    handleToolCall(toolName, toolParams, message.id, callback);
+    
+    // Return undefined to prevent immediate response
+    // The response will be sent by the handleToolCall function
+    return undefined;
+  }
+}
+
+/**
+ * Handle a tool call asynchronously
+ * @param {string} toolName - Name of the tool to call
+ * @param {Object} toolParams - Tool parameters
+ * @param {string|number} messageId - ID of the original message
+ * @param {Function} callback - Function to call with the response
+ */
+async function handleToolCall(toolName, toolParams, messageId, callback) {
+  try {
+    
+    // Handle our built-in tools
     if (toolName === 'servers_list') {
       const config = getServersConfig();
-      return callback({
+      callback({
         jsonrpc: '2.0',
         result: {
           data: config
         },
-        id: message.id
+        id: messageId
       });
+      return;
     }
     
     if (toolName === 'servers_enable' && toolParams.name) {
       const { enableServer } = require('./serverManager');
       try {
         const result = enableServer(toolParams.name);
-        return callback({
+        callback({
           jsonrpc: '2.0',
           result: {
             data: result
           },
-          id: message.id
+          id: messageId
         });
+        return;
       } catch (error) {
-        return callback({
+        callback({
           jsonrpc: '2.0',
           error: {
             code: -32603,
             message: error.message || 'Internal error'
           },
-          id: message.id
+          id: messageId
         });
+        return;
       }
     }
     
@@ -207,32 +284,89 @@ function handleMcpMessage(message, callback) {
       const { disableServer } = require('./serverManager');
       try {
         const result = disableServer(toolParams.name);
-        return callback({
+        callback({
           jsonrpc: '2.0',
           result: {
             data: result
           },
-          id: message.id
+          id: messageId
         });
+        return;
       } catch (error) {
-        return callback({
+        callback({
           jsonrpc: '2.0',
           error: {
             code: -32603,
             message: error.message || 'Internal error'
           },
-          id: message.id
+          id: messageId
         });
+        return;
       }
     }
     
-    return callback({
+    // Handle passthrough tools from other servers
+    // Parse the tool name to extract server and actual tool name
+    const match = toolName.match(/^([a-z0-9_]+)_(.+)$/);
+    if (match) {
+      const serverPrefix = match[1];
+      const actualToolName = match[2];
+      
+      // Find the server with this prefix
+      const { getEnabledServers } = require('./utils');
+      const enabledServers = getEnabledServers();
+      const server = enabledServers.find(s => 
+        s.name.toLowerCase().replace(/\s+/g, '_') === serverPrefix);
+      
+      if (server) {
+        log(`[MCP] Passing through tool call to server ${server.name}: ${actualToolName}`);
+        const mcpClient = require('./mcpClient');
+        
+        try {
+          // Call the tool on the target server
+          const result = await mcpClient.callTool(server.url, actualToolName, toolParams);
+          
+          callback({
+            jsonrpc: '2.0',
+            result: {
+              data: result
+            },
+            id: messageId
+          });
+          return;
+        } catch (error) {
+          log(`[ERROR] Error calling tool on server ${server.name}:`, error);
+          callback({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: `Error calling tool on server ${server.name}: ${error.message}`
+            },
+            id: messageId
+          });
+          return;
+        }
+      }
+    }
+    
+    // If we get here, the tool wasn't found
+    callback({
       jsonrpc: '2.0',
       error: {
         code: -32601,
         message: 'Method not found'
       },
-      id: message.id
+      id: messageId
+    });
+  } catch (error) {
+    log('[ERROR] Unexpected error handling tool call:', error);
+    callback({
+      jsonrpc: '2.0',
+      error: {
+        code: -32603,
+        message: `Internal error: ${error.message}`
+      },
+      id: messageId
     });
   }
   
