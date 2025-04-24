@@ -336,4 +336,20 @@ function sendResponse(response) {
 
 // Log startup
 log('MCP stdio server started');
+log('Node version:', process.version);
+log('Process arguments:', process.argv);
+log('Environment variables:', JSON.stringify({
+  MCP_STDIO: process.env.MCP_STDIO,
+  NODE_ENV: process.env.NODE_ENV
+}));
+log('Current working directory:', process.cwd());
 log('Waiting for client messages...');
+
+// Send an initial notification to stdout to help with debugging
+process.stdout.write(JSON.stringify({
+  jsonrpc: '2.0',
+  method: 'notification',
+  params: {
+    message: 'MCP server ready for connection'
+  }
+}) + '\n');
